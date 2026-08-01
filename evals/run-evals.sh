@@ -77,9 +77,27 @@ def find_bash() -> str:
 
 
 def build_release(out_dir: Path) -> dict[str, object]:
-    completed = run_python(
-        "scripts/build-release.py", "--root", str(ROOT), "--out-dir", str(out_dir)
+    arguments = [
+        "scripts/build-release.py",
+        "--root",
+        str(ROOT),
+        "--out-dir",
+        str(out_dir),
+    ]
+    git_check = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--is-inside-work-tree"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
+    if git_check.returncode != 0 or git_check.stdout.strip() != "true":
+        # The eval may run inside a release extraction, which has no Git
+        # work tree; the trusted-source gate then requires an explicit
+        # unverified label.
+        arguments.append("--allow-unverified")
+    completed = run_python(*arguments)
     if completed.returncode != 0:
         raise SystemExit(
             f"evals: build-release failed: {completed.stderr.strip()[-400:]}"
