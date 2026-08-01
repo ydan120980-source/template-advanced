@@ -77,6 +77,8 @@ def find_bash() -> str:
 
 
 def build_release(out_dir: Path) -> dict[str, object]:
+    from tools.template_doctor.release_source import is_git_work_tree
+
     arguments = [
         "scripts/build-release.py",
         "--root",
@@ -84,15 +86,7 @@ def build_release(out_dir: Path) -> dict[str, object]:
         "--out-dir",
         str(out_dir),
     ]
-    git_check = subprocess.run(
-        ["git", "-C", str(ROOT), "rev-parse", "--is-inside-work-tree"],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if git_check.returncode != 0 or git_check.stdout.strip() != "true":
+    if not is_git_work_tree(ROOT):
         # The eval may run inside a release extraction, which has no Git
         # work tree; the trusted-source gate then requires an explicit
         # unverified label.

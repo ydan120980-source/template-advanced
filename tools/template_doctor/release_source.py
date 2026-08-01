@@ -67,6 +67,21 @@ def _git_top_level(root: Path) -> str | None:
     return completed.stdout.strip() or None
 
 
+def is_git_work_tree(root: Path | str) -> bool:
+    """Return whether ``root`` is the top-level work tree of a Git repository.
+
+    Mirrors the trusted-source gate: only a top-level Git work tree can
+    produce a commit-traced release build without an explicit unverified
+    label. Callers that can legitimately run outside Git (release
+    extractions, eval fixtures) use this to decide whether to pass
+    ``--allow-unverified``.
+    """
+
+    project_root = Path(root).resolve()
+    top_level = _git_top_level(project_root)
+    return top_level is not None and Path(top_level).resolve() == project_root
+
+
 def _is_regular_blob(mode: str) -> bool:
     return mode.startswith("100")
 
@@ -195,17 +210,12 @@ def resolve_release_source(
     """
 
     project_root = Path(root).resolve()
-    top_level = _git_top_level(project_root)
-    if top_level is None:
+    if not is_git_work_tree(project_root):
         raise ReleaseSourceError(
             f"{project_root} is not a Git work tree; a formal release build "
             "requires a clean Git commit. Use the release integration test "
             "only from a Git checkout, or explicitly accept an unverified "
             "local build."
-        )
-    if Path(top_level).resolve() != project_root:
-        raise ReleaseSourceError(
-            f"release root {project_root} is not the Git top-level work tree"
         )
 
     release_paths = [path for path in relative_paths if path] if relative_paths else []

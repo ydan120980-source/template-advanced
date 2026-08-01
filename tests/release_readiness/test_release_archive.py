@@ -58,6 +58,19 @@ def _run_python(
     return completed
 
 
+def _build_command(*arguments: str) -> list[str]:
+    from tools.template_doctor.release_source import is_git_work_tree
+
+    command = ["scripts/build-release.py", *arguments]
+    if not is_git_work_tree(REPO_ROOT):
+        # Inside a release extraction the repository has no Git work tree;
+        # the trusted-source gate requires an explicit unverified label.
+        # The Git-commit gate itself is exercised by
+        # test_release_source_gate.py against fixture repositories.
+        command.append("--allow-unverified")
+    return command
+
+
 def _write_archive_and_manifest(
     directory: Path,
     paths: list[str],
@@ -115,9 +128,7 @@ class ReleasePipelineTests(unittest.TestCase):
             for out_dir in (first, second):
                 _run_python(
                     REPO_ROOT,
-                    "scripts/build-release.py",
-                    "--out-dir",
-                    str(out_dir),
+                    *_build_command("--out-dir", str(out_dir)),
                 )
             first_manifest = (first / f"{STEM}.manifest.json").read_bytes()
             second_manifest = (second / f"{STEM}.manifest.json").read_bytes()
@@ -167,9 +178,7 @@ class ReleasePipelineTests(unittest.TestCase):
             out_dir.mkdir()
             _run_python(
                 REPO_ROOT,
-                "scripts/build-release.py",
-                "--out-dir",
-                str(out_dir),
+                *_build_command("--out-dir", str(out_dir)),
             )
             completed = _run_python(
                 REPO_ROOT,
@@ -307,9 +316,7 @@ class ReleasePipelineTests(unittest.TestCase):
             out_dir.mkdir()
             _run_python(
                 REPO_ROOT,
-                "scripts/build-release.py",
-                "--out-dir",
-                str(out_dir),
+                *_build_command("--out-dir", str(out_dir)),
             )
             extract_dir = Path(temporary_directory) / "extract"
             with zipfile.ZipFile(out_dir / f"{STEM}.zip", mode="r") as archive:
