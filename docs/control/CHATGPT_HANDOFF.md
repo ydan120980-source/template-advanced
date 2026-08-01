@@ -7,7 +7,9 @@ Based On State Version: v2.0
 
 - **Current phase:** RELEASED — v1.0.0 published under Apache License 2.0
 - **Current axis:** public, auditable, reproducible template
-- **Current Sprint:** none active
+- **Current Sprint:** `CODEX-CLEAN-RELEASE-SAFE-DEFAULTS-2026-08-01` (clean
+  release sources and safe Codex defaults) — validation complete; awaiting
+  commit and User review
 - **Default action:** follow `docs/control/NEXT_CODEX_TASK.md` (the onboarding
   packet) to initialize a real project; keep `bash scripts/verify.sh`,
   `bash evals/run-evals.sh`, and Template Doctor green.
@@ -19,6 +21,17 @@ Based On State Version: v2.0
 - Template Doctor, Run Guard, and the release pipeline use only the Python
   standard library.
 - The release archive is built deterministically and verified independently.
+- Release builds require a clean Git commit: release files are read from the
+  Git object database at HEAD, and dirty, untracked, or deleted release files
+  block the build. Non-Git trees must opt in with `--allow-unverified` and
+  are labeled unverified-source-tree builds.
+- The committed `.codex/config.toml` keeps safe defaults (on-request
+  approval, workspace-write sandbox, network off); `approval_policy =
+  "never"` is never a template default.
+- The unit-test suite runs fast directed tests only; the recursive full
+  release validation runs in `scripts/integration-test-release.sh`, which
+  release CI executes. Validation subprocesses have bounded timeouts and
+  whole-process-tree termination.
 - CI runs on Ubuntu, Windows, and macOS; release artifacts are attached to
   `v*` tags by the release-artifacts workflow.
 - CodeGraph is optional; `docs/architecture/CODEGRAPH.md` documents the
@@ -35,7 +48,9 @@ Based On State Version: v2.0
 
 Do not commit credentials, private paths, planning journals, caches, or
 release archives to Git. Do not rewrite pushed history or force-push. Do not
-claim GitHub features are enabled unless the API reports them.
+claim GitHub features are enabled unless the API reports them. Do not build
+release artifacts from a dirty workspace; release builds read from HEAD and
+refuse uncommitted release files.
 
 The project is licensed under the Apache License 2.0; attribute changes belong
 in `NOTICE`.

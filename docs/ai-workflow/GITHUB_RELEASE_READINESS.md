@@ -14,8 +14,15 @@ itself and to every project initialized from it.
 - [ ] Template Doctor has no release-content failure beyond the explicitly
   deferred missing-Git-baseline finding (a missing CodeGraph index is an
   optional capability reported as a non-blocking `skip`).
+- [ ] The committed `.codex/config.toml` keeps safe defaults
+  (`approval_policy = "on-request"`, `sandbox_mode = "workspace-write"`,
+  network access off unless explicitly opted in); Template Doctor's
+  `config.safe_defaults` rule is part of release validation.
 - [ ] The deterministic release build and the independent archive verifier
   pass, including the clean-extraction validation.
+- [ ] `bash scripts/integration-test-release.sh` passes from a clean checkout
+  (double build byte-identical, clean extraction `--validate`, corrupted
+  extracted tree rejected).
 - [ ] All project Skills validate; planning plan-doctor reports no failure.
 - [ ] `codex --strict-config --version` and `codex doctor --summary` complete
   without project configuration drift.
@@ -53,12 +60,26 @@ release inventory shared with Template Doctor:
 - a deterministic publication digest, so two builds from the same tree are
   byte-identical.
 
+**Clean-source gate.** Inside a Git work tree, the builder resolves HEAD, and
+every release file must be tracked at HEAD, present in the work tree, and
+byte-identical to its blob at HEAD — otherwise the build is refused and the
+offending paths are listed. File content and modes are read from the Git
+object database and index, never from the work tree, so uncommitted edits
+cannot change published artifact bytes. The release file set is the precise
+`.codex` allowlist (`config.toml`, `mcp.example.toml`, and the four named
+agent files), never an open directory. Outside a Git work tree the builder
+refuses by default; `--allow-unverified` produces an archive explicitly
+labeled an unverified-source-tree build.
+
 `scripts/verify-release-archive.py` then checks path containment, duplicate and
 case-collision freedom, symlink absence, manifest/digest/size/SHA-256/mode
 matching, local-state and privacy-pattern absence, executable-bit policy for
 shell scripts, and optional full validation in a clean extraction directory.
-The release-artifacts workflow performs the double build, byte comparison,
-`SHA256SUMS` generation, and Release attachment on tag pushes.
+The unit-test suite never runs the recursive full validation; the release
+integration script performs the double build, byte comparison, clean
+extraction validation, and corrupted-tree rejection, and the
+release-artifacts workflow executes it on every tag push before generating
+`SHA256SUMS` and attaching the Release.
 
 ## Owner Decisions
 

@@ -366,6 +366,80 @@ def _single_planning_authority(root: Path) -> CheckResult:
     )
 
 
+def _codex_config_safe_defaults(root: Path) -> CheckResult:
+    """Fail when the project Codex configuration departs from safe defaults.
+
+    The release-facing contract is: interactive approval is ``on-request``,
+    sandbox mode is ``workspace-write``, network access is absent or ``false``,
+    and no absolute path or credential appears in the file. Evidence uses only
+    relative paths.
+    """
+
+    rule_id = "config.safe_defaults"
+    relative = ".codex/config.toml"
+    path = root / relative
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return _result(
+            rule_id,
+            status="fail",
+            evidence=f"{relative} is missing; the release contract requires a committed project configuration.",
+            recommendation="Commit a project Codex configuration with approval_policy = \"on-request\".",
+        )
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
+        return _result(
+            rule_id,
+            status="fail",
+            evidence=f"{relative} is not valid TOML ({type(exc).__name__}); parseable configuration is required.",
+            recommendation="Repair the TOML and re-run the release validation.",
+        )
+
+    problems: list[str] = []
+    if data.get("approval_policy") != "on-request":
+        problems.append(
+            f"approval_policy is {data.get('approval_policy', 'missing')!r}; expected \"on-request\""
+        )
+    if data.get("sandbox_mode") != "workspace-write":
+        problems.append(
+            f"sandbox_mode is {data.get('sandbox_mode', 'missing')!r}; expected \"workspace-write\""
+        )
+    workspace = data.get("sandbox_workspace_write")
+    if isinstance(workspace, dict) and workspace.get("network_access") is True:
+        problems.append("network_access is enabled; network must be off by default")
+
+    raw = _read_text(path) or ""
+    lines = raw.splitlines()
+    for line_number, line in enumerate(lines, start=1):
+        if re.search(r"[A-Za-z]:[\\/]|/Users/|C:\\\\Users", line):
+            problems.append(f"line {line_number} contains an absolute local path")
+        if re.search(
+            r"\bgithub_pat_[A-Za-z0-9_]{10,}|\bghp_[A-Za-z0-9]{20,}|"
+            r"\bAKIA[A-Z0-9]{16}|BEGIN\s+PR[IV]ATE\s+K[EY]",
+            line,
+        ):
+            problems.append(f"line {line_number} contains a credential pattern")
+    if problems:
+        return _result(
+            rule_id,
+            status="fail",
+            evidence=f"{relative} departs from safe defaults: " + "; ".join(problems),
+            recommendation=(
+                "Restore approval_policy = \"on-request\", sandbox_mode = "
+                "\"workspace-write\", and keep network access off by default."
+            ),
+        )
+    return _result(
+        rule_id,
+        status="pass",
+        evidence=(
+            f"{relative} is parseable and keeps safe defaults: on-request "
+            "approval, workspace-write sandbox, network access off."
+        ),
+        recommendation="Review configuration changes against the runtime profile before release.",
+    )
+
+
 def _codex_config_profiles(root: Path) -> CheckResult:
     rule_id = "config.unsupported_profiles"
     relative = ".codex/config.toml"
@@ -1123,6 +1197,7 @@ def build_rules(root: Path | str, *, strict: bool = False) -> list[RuleCallable]
         ("capability.hooks", _hooks_capability),
         ("capability.mcp", _mcp_capability),
         ("codegraph.initialized", lambda path: _codegraph_initialized(path, strict=strict)),
+        ("config.safe_defaults", _codex_config_safe_defaults),
         ("config.unsupported_profiles", _codex_config_profiles),
         ("control.current_state_freshness", _state_freshness),
         ("control.next_task_executable", _next_task_executable),

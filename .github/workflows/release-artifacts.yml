@@ -34,21 +34,12 @@ jobs:
         run: bash scripts/verify.sh
       - name: Evals
         run: bash evals/run-evals.sh
-      - name: Build release (first)
-        run: python scripts/build-release.py --out-dir dist-build-1
-      - name: Build release (second)
-        run: python scripts/build-release.py --out-dir dist-build-2
-      - name: Compare builds
-        run: |
-          set -euo pipefail
-          for f in template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt; do
-            cmp "dist-build-1/$f" "dist-build-2/$f" || { echo "$f differs between builds" >&2; exit 1; }
-          done
-          echo "determinism: all three artifacts are byte-identical"
-      - name: Promote canonical build
+      - name: Release integration (double build, clean --validate, corrupt rejection)
+        run: bash scripts/integration-test-release.sh
+      - name: Build canonical release
         run: |
           mkdir -p dist
-          cp dist-build-1/* dist/
+          python scripts/build-release.py --out-dir dist
       - name: Verify archive with clean extraction
         run: python scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json --validate
       - name: Generate SHA256SUMS

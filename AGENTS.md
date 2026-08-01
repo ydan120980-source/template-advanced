@@ -76,11 +76,18 @@ State maintenance can use `state-compressor` after accepted Medium/Large work, c
 GitHub automation is real and configured for the public repository:
 
 - `ci.yml` runs the cross-platform validation matrix on `main` and pull requests.
-- `release-artifacts.yml` builds and verifies release artifacts and attaches
-  them to `v*` tag releases.
+- `release-artifacts.yml` runs the release integration script (double build,
+  byte comparison, clean-extraction validation), builds and verifies release
+  artifacts, and attaches them to `v*` tag releases. Release builds require a
+  clean Git commit and read release files from HEAD.
 - `security.yml` runs CodeQL, credential scanning, and documentation hygiene.
 - `dependabot.yml` updates GitHub Actions weekly with a bounded pull-request
   limit.
+
+Release builds must never be run from a dirty workspace: uncommitted changes
+to any release file (including `.codex/config.toml`) block the build, and the
+committed Codex configuration must keep safe defaults (on-request approval,
+workspace-write sandbox, network off).
 
 The prompt files under `.github/codex/prompts/` remain inert reference text and
 are not connected to the workflows above.

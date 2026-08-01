@@ -8,6 +8,32 @@ release tags exist.
 
 ### Changed
 
+- Release builds now require a clean Git commit: `scripts/build-release.py`
+  resolves HEAD, verifies every release file is tracked, present, and
+  byte-identical to its HEAD blob, and reads all content from the Git object
+  database, so dirty workspaces can never leak into published archives.
+  Non-Git trees refuse by default and require `--allow-unverified`, which
+  labels the result an unverified-source-tree build. The manifest records the
+  source type and commit.
+- The committed `.codex/config.toml` keeps safe defaults (on-request
+  approval, workspace-write sandbox, network access off). Template Doctor
+  gained the `config.safe_defaults` rule, which blocks a release when the
+  committed configuration departs from those defaults, is unparseable, or
+  embeds absolute paths or credentials. `approval_policy = "never"` is never
+  a template default.
+- The `.codex` release inventory is now a precise allowlist
+  (`config.toml`, `mcp.example.toml`, and the four named agent files) instead
+  of an open directory, so runtime session and experiment files can never be
+  packaged.
+- The unit-test suite runs only fast, directed tests. The recursive full
+  release validation (setup/verify/evals/doctor on a clean extraction) moved
+  to `scripts/integration-test-release.sh`, which also covers double-build
+  byte determinism and corrupted-extracted-tree rejection and is executed by
+  the release-artifacts workflow.
+- Validation subprocesses now run through shared process-tree helpers with
+  bounded per-stage timeouts and whole-tree termination (POSIX `killpg`,
+  Windows `taskkill /T /F /PID`), so a hung validation stage can neither
+  block indefinitely nor leave descendant processes behind.
 - CodeGraph detection now has three explicit states: absent index reports
   `skip/info` by default and `fail/error` under `--strict`; a present but
   corrupt or invalid database always reports `fail/error`; a valid candidate

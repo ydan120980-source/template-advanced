@@ -41,6 +41,19 @@ Packet scope, budgets, validation, or stop conditions.
 - The release pipeline is a deterministic builder and an independent archive
   verifier under `scripts/`, backed by one shared release inventory in
   `tools/template_doctor/`.
+- Release builds read every release file from the Git object database at
+  HEAD; a release file that is untracked, deleted, or differs from HEAD
+  blocks the build, so dirty workspaces never enter published archives.
+  Non-Git trees must opt in with `--allow-unverified` and the result is
+  labeled an unverified-source-tree build.
+- The committed `.codex/config.toml` keeps safe defaults
+  (`approval_policy = "on-request"`, `sandbox_mode = "workspace-write"`,
+  network access off); `approval_policy = "never"` is not a default.
+- The unit-test suite runs only fast, directed tests; the recursive full
+  release validation (setup/verify/evals/doctor on a clean extraction) runs
+  in `scripts/integration-test-release.sh`, which release CI executes. All
+  validation subprocesses run under bounded timeouts with whole-process-tree
+  termination.
 - The project is licensed under the Apache License 2.0 (`LICENSE`, `NOTICE`).
 - The public repository has a Git baseline with `main` as the default branch;
   CI runs on Ubuntu, Windows, and macOS for Python 3.11, 3.12, and 3.13.
@@ -62,6 +75,15 @@ Packet scope, budgets, validation, or stop conditions.
   entry points that do not depend on the Unix executable bit.
 - [x] Deterministic release builder, manifest, and archive verifier with
   privacy and local-state checks.
+- [x] Clean-source release gate: builds read release files from HEAD and
+  refuse dirty, untracked, or deleted release files; non-Git trees must opt
+  in with an unverified-source-tree label.
+- [x] Safe committed Codex defaults enforced by the `config.safe_defaults`
+  Doctor rule (on-request approval, workspace-write sandbox, network off).
+- [x] Heavy release validation split: the unit suite runs fast directed tests
+  only; the recursive full validation lives in
+  `scripts/integration-test-release.sh`, and every validation subprocess runs
+  with bounded timeouts and whole-process-tree termination.
 - [x] Bytecode-write guards so validation runs leave no `__pycache__`.
 - [x] Apache License 2.0, NOTICE, community files, Dependabot, and GitHub
   Actions CI, release-artifacts, and security workflows.
@@ -124,8 +146,8 @@ remain blocking, and no complete-schema guarantee is claimed.
 
 ## 9. Current Sprint
 
-- **Task ID:** `CODEX-CODEGRAPH-HEURISTIC-2026-08-01` (CodeGraph candidate
-  database heuristic contract)
+- **Task ID:** `CODEX-CLEAN-RELEASE-SAFE-DEFAULTS-2026-08-01` (clean release
+  sources and safe Codex defaults)
 - **Mode:** Lite
 - **State:** validation complete; awaiting commit and User review
 

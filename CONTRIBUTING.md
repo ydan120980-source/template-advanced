@@ -45,6 +45,18 @@ missing-Git-baseline finding; a missing CodeGraph index is an optional
 capability reported as a non-blocking `skip`. Invocation or operational exit
 `2` is always a failure.
 
+The `build-release.py` command requires a clean Git commit: any release file
+that is untracked, deleted, or differs from its HEAD blob blocks the build
+and names the offending paths. Non-Git trees require `--allow-unverified`
+and are labeled unverified-source-tree builds. Do not commit a Codex
+configuration that departs from the safe defaults (on-request approval,
+workspace-write sandbox, network off); the `config.safe_defaults` Doctor rule
+enforces the contract at release time.
+
+The unit-test suite runs only fast, directed tests. The recursive full
+release validation runs in `scripts/integration-test-release.sh`; run it
+before any release build and whenever the release pipeline changes.
+
 Before requesting review:
 
 - confirm the unit-test suites pass through `bash scripts/test.sh`;

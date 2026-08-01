@@ -1,5 +1,11 @@
 # Project-local Codex defaults. Lite / Standard / Full are governance modes
 # defined in docs/control, not Codex CLI profiles.
+#
+# Network access is OFF by default. Enable it only when the repository owner
+# explicitly accepts network access for a session:
+#
+# [sandbox_workspace_write]
+# network_access = true
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 

@@ -53,12 +53,20 @@ py -3 scripts/build-release.py
 py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json
 ```
 
+The build command requires a clean Git commit: release files must be tracked
+at HEAD and identical to their HEAD blobs, or the build is refused with the
+offending paths listed. Non-Git trees require `--allow-unverified` and
+produce a labeled unverified-source-tree build.
+
 Template Doctor exits `1` for the deferred Git baseline only; a missing
 CodeGraph index is an optional capability reported as a non-blocking `skip`,
 and any other content failure must be fixed before declaring readiness. The
 Doctor's CodeGraph check is a conservative heuristic (readable SQLite,
 passing `quick_check`, at least one recognized candidate table such as
-`nodes` or `edges`) and is not a complete schema-compatibility guarantee.
+`nodes` or `edges`) and is not a complete schema-compatibility guarantee. The
+committed `.codex/config.toml` must keep safe defaults (`on-request`
+approval, `workspace-write` sandbox, network access off); `approval_policy =
+"never"` is not a template default.
 
 ## Stop Conditions
 

@@ -87,6 +87,12 @@ _EXCLUDED_DIR_NAMES = frozenset(
     }
 )
 
+# Precise file allowlist for .codex. Only explicitly named project files are
+# release candidates; runtime session state, caches, and future experiment
+# files must never enter the archive.
+_CODEX_ALLOWED_FILES = frozenset({"config.toml", "mcp.example.toml"})
+_CODEX_ALLOWED_AGENT_FILES = frozenset({"architect.toml", "reviewer.toml", "state-compressor.toml", "tester.toml"})
+
 # File names that are never release candidates.
 _EXCLUDED_FILE_NAMES = frozenset(
     {
@@ -106,7 +112,6 @@ _EXCLUDED_SUFFIXES = (".class", ".jks", ".key", ".log", ".p12", ".pem", ".pfx", 
 _SECRET_ENV_SUFFIX = ".env."
 _EXCLUDED_UNDER_EVALS = frozenset({"artifacts", "results", "tmp"})
 _EXCLUDED_UNDER_GITHUB_CODEX = frozenset({"logs", "tmp"})
-_CODEX_RUNTIME_PREFIXES = ("cache", "session", "tmp")
 
 # Text suffixes scanned for privacy and local-path hygiene by the verifier.
 TEXT_FILE_SUFFIXES = frozenset(
@@ -187,22 +192,35 @@ def _is_excluded(relative: str) -> bool:
         part in _EXCLUDED_UNDER_GITHUB_CODEX for part in parts[2:-1]
     ):
         return True
-    if parts[0] == ".codex" and (
-        name.startswith(_CODEX_RUNTIME_PREFIXES) or "logs" in parts[1:-1]
-    ):
+    if parts[0] == ".codex":
+        # Precise file allowlist: .codex is not an open directory. Anything
+        # that is not a named project file (config, example, agent defs) is a
+        # runtime or experiment file and is never a release candidate.
+        if len(parts) == 2:
+            return name not in _CODEX_ALLOWED_FILES
+        if len(parts) == 3 and parts[1] == "agents":
+            return name not in _CODEX_ALLOWED_AGENT_FILES
         return True
     return False
 
 
-def iter_release_entries(root: Path | str) -> list[ReleaseEntry]:
-    """Return the sorted, deterministic release inventory for ``root``."""
+def select_release_paths(root: Path | str) -> list[str]:
+    """Return the sorted, deterministic release file paths for ``root``.
+
+    Selection follows the canonical allowlist and exclusion rules without
+    reading file contents. The Git-backed release builder uses this to
+    determine the release inventory and then reads every selected path from
+    the Git object database instead of the working tree.
+    """
 
     project_root = Path(root).resolve()
-    entries: list[ReleaseEntry] = []
+    paths: list[str] = []
     for top_level in RELEASE_TOP_LEVEL:
         candidate = project_root / top_level
         if candidate.is_file():
-            _append_file_entry(entries, candidate, project_root)
+            relative = candidate.relative_to(project_root).as_posix()
+            if not _is_excluded(relative):
+                paths.append(relative)
         elif candidate.is_dir():
             for directory, subdirectories, filenames in os.walk(
                 candidate, followlinks=False
@@ -213,11 +231,24 @@ def iter_release_entries(root: Path | str) -> list[ReleaseEntry]:
                     if name not in _EXCLUDED_DIR_NAMES
                 )
                 for filename in sorted(filenames):
-                    path = Path(directory) / filename
-                    relative = path.relative_to(project_root).as_posix()
+                    relative = (
+                        Path(directory) / filename
+                    ).relative_to(project_root).as_posix()
                     if _is_excluded(relative):
                         continue
-                    _append_file_entry(entries, path, project_root)
+                    paths.append(relative)
+    paths.sort()
+    return paths
+
+
+def iter_release_entries(root: Path | str) -> list[ReleaseEntry]:
+    """Return the sorted, deterministic release inventory for ``root``."""
+
+    project_root = Path(root).resolve()
+    entries: list[ReleaseEntry] = []
+    for relative in select_release_paths(project_root):
+        path = project_root / relative
+        _append_file_entry(entries, path, project_root)
     entries.sort(key=lambda entry: entry.path)
     return entries
 

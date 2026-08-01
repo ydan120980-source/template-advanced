@@ -914,6 +914,95 @@ class TemplateDoctorCliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 2)
         self.assertIn("invalid choice", completed.stderr.lower())
 
+    def _config_rule(self, root: Path) -> dict[str, object]:
+        from tools.template_doctor.rules import _codex_config_safe_defaults
+
+        return _codex_config_safe_defaults(root).to_dict()
+
+    def test_config_safe_defaults_accepts_safe_committed_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "safe"
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                'approval_policy = "on-request"\n'
+                'sandbox_mode = "workspace-write"\n'
+                "[sandbox_workspace_write]\n"
+                "network_access = false\n",
+                encoding="utf-8",
+            )
+            result = self._config_rule(root)
+
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["rule_id"], "config.safe_defaults")
+        self.assertIn(".codex/config.toml", result["evidence"])
+        self.assertNotIn("\\", result["evidence"])
+
+    def test_config_safe_defaults_rejects_never_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "never"
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text('approval_policy = "never"\n', encoding="utf-8")
+            result = self._config_rule(root)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("approval_policy is 'never'", result["evidence"])
+
+    def test_config_safe_defaults_rejects_network_access(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "network"
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                'approval_policy = "on-request"\n'
+                'sandbox_mode = "workspace-write"\n'
+                "[sandbox_workspace_write]\n"
+                "network_access = true\n",
+                encoding="utf-8",
+            )
+            result = self._config_rule(root)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("network_access is enabled", result["evidence"])
+
+    def test_config_safe_defaults_rejects_corrupt_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "corrupt"
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text('approval_policy = "on-request\n', encoding="utf-8")
+            result = self._config_rule(root)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("not valid TOML", result["evidence"])
+
+    def test_config_safe_defaults_requires_committed_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "missing"
+            root.mkdir()
+            result = self._config_rule(root)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("is missing", result["evidence"])
+
+    def test_config_safe_defaults_evidence_uses_only_relative_paths(self) -> None:
+        """Evidence must never embed the absolute fixture path."""
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "path"
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir(parents=True)
+            config.write_text(
+                'approval_policy = "on-request"\n'
+                "# C:\\Users\\owner secret\n",
+                encoding="utf-8",
+            )
+            result = self._config_rule(root)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("absolute local path", result["evidence"])
+        self.assertNotIn(str(temporary_directory).replace("\\", "/"), result["evidence"])
+
 
 if __name__ == "__main__":
     unittest.main()

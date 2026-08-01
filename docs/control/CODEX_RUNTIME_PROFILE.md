@@ -47,6 +47,23 @@ The project config intentionally defines one conservative default (`workspace-wr
 
 After changing `.codex/config.toml`, run `codex doctor` and treat any unsupported project-local key warning as configuration drift that must be removed or documented before relying on it.
 
+### Committed Configuration Contract
+
+The committed `.codex/config.toml` is a release-facing contract, enforced by
+the Template Doctor rule `config.safe_defaults`:
+
+- `approval_policy` must be `"on-request"`; `"never"` is never a template
+  default.
+- `sandbox_mode` must be `"workspace-write"`.
+- `sandbox_workspace_write.network_access` must not be `true`; network is off
+  unless the repository owner explicitly opts in for a session.
+- The file must not contain absolute local paths or credential patterns, and
+  evidence for this rule is relative-path only.
+
+Release builds read `.codex/config.toml` (and every other release file) from
+the Git object database at HEAD; an uncommitted `approval_policy = "never"`
+edit therefore blocks the build instead of silently entering the archive.
+
 ---
 
 ## 2. Network Policy

@@ -132,3 +132,88 @@ Follow-up:
   remain unverified because no CodeGraph tool was available in this
   environment
 ```
+
+```text
+Evidence Ledger
+
+Sprint ID: CODEX-CLEAN-RELEASE-SAFE-DEFAULTS-2026-08-01
+Date: 2026-08-01
+Repo: template-advanced
+Task Size: Small
+Workflow Mode: Lite
+
+Decision Note:
+- Why Lite is sufficient: bounded release-hygiene fix over existing
+  contracts; no new product axis, no dependency change, no boundary change.
+- Allowed Paths: tools/, scripts/, tests/, docs/, README.md, CONTRIBUTING.md,
+  AGENTS.md, CHANGELOG.md, evals/, .github/workflows/, .codex/config.toml,
+  .gitignore
+- Forbidden Paths: dist/, .git/, secrets, dependency files, Run Guard core
+  logic, v1.0.0 tag, GitHub Release
+- Escalation Conditions: none triggered
+
+Files Changed:
+- .codex/config.toml: committed safe defaults (on-request approval,
+  workspace-write sandbox, network access off with opt-in comment)
+- tools/template_doctor/release_inventory.py: precise .codex allowlist
+  (config.toml, mcp.example.toml, four named agent files)
+- tools/template_doctor/release_source.py (new): clean-source gate — release
+  files must be tracked at HEAD, present, and byte-identical to HEAD blobs;
+  reads content from the Git object database
+- scripts/build-release.py: reads release files from HEAD; refuses dirty
+  sources; non-Git trees require --allow-unverified (unverified-source-tree
+  label)
+- tools/template_doctor/rules.py: config.safe_defaults rule (on-request,
+  workspace-write, no network, no absolute paths/credentials)
+- tools/aiwf_run_guard/procutil.py (new): process-tree helpers with bounded
+  timeouts and whole-tree termination (POSIX killpg, Windows taskkill /T /F
+  /PID)
+- scripts/verify-release-archive.py: validation stages run through the
+  process-tree helpers with per-stage timeouts; AIWF_RELEASE_VALIDATION
+  recursion guard retained
+- tests/: 8 release-source gate scenarios (P0-1..P0-8), 6 config.safe_defaults
+  contract tests, 4 procutil timeout/tree-kill tests; the unit suite no
+  longer runs the recursive full --validate
+- scripts/integration-test-release.sh (new): double build byte-compare,
+  clean extraction --validate, corrupted-tree rejection
+- .github/workflows/release-artifacts.yml: run the release integration script
+  before building the canonical artifact
+- docs/: README, AGENTS, CONTRIBUTING, CHANGELOG, CODEX_RUNTIME_PROFILE,
+  GITHUB_RELEASE_READINESS, CURRENT_PROJECT_STATE, CHATGPT_HANDOFF,
+  NEXT_CODEX_TASK, and this ledger updated for the clean-source gate, safe
+  defaults, and split validation
+
+Commands Actually Run:
+- py -3 -B -m unittest discover -s tests (exit 0 after commit)
+- bash scripts/setup.sh (exit 0)
+- bash scripts/verify.sh (exit 0; lint, structural check, unit suites)
+- bash evals/run-evals.sh (exit 0; all eval cases)
+- py -3 -B -m tools.template_doctor --root . --format json (exit 0, ready)
+- py -3 -B -m tools.template_doctor --root . --format json --strict (exit 1,
+  codegraph.initialized fail/error as designed)
+- py -3 -B scripts/ci-doctor-gate.py --root . (exit 0)
+- py -3 -B scripts/build-release.py --out-dir dist-a / dist-b (exit 0;
+  double build byte-identical)
+- py -3 -B scripts/verify-release-archive.py --archive ... --validate
+  (exit 0; clean extraction validation)
+- bash scripts/integration-test-release.sh (exit 0)
+- git archive / fresh checkout rebuild (artifact bytes identical to the
+  committed-tree build)
+
+Validation Result:
+- Passed: unit suites, verify, all evals, CI doctor gate (exit 0), default
+  Doctor (ready), archive --validate, double-build byte determinism, dirty
+  workspace block (dirty config, untracked allowlisted file), non-Git
+  refusal, and commit-reproducibility byte comparison
+- Notes: the release ZIP built from the final commit is byte-identical to a
+  rebuild from a fresh clone/archive of that commit; blocked builds produce
+  no artifacts
+
+Escalation Triggered:
+- No
+
+Follow-up:
+- Owner decides whether to publish v1.0.1
+- Real CodeGraph indexing remains unverified; no CodeGraph tool was
+  available in this environment
+```

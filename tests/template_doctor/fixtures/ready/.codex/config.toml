@@ -1,2 +1,7 @@
-model = "gpt-5"
-model_reasoning_effort = "high"
+# Fixture project-local Codex defaults (safe contract).
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[agents]
+max_threads = 4
+max_depth = 1

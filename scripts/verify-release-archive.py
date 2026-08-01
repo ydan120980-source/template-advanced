@@ -32,7 +32,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import zipfile
@@ -235,11 +234,9 @@ def _find_bash() -> str:
     )
 
 
-# Per-stage bounds so validation can never wait indefinitely. subprocess.run
-# terminates the direct child on timeout; descendant processes started by a
-# stage script are not tracked on every platform, but the stages are short-lived
-# scripts that exit with their tree, so the bound still guarantees no infinite
-# wait for the validation as a whole.
+# Per-stage bounds so validation can never wait indefinitely. Every stage runs
+# through ``run_process_tree`` which starts the command in its own process
+# group and terminates the entire tree on timeout.
 VALIDATION_TIMEOUTS = {
     "setup": 120,
     "verify": 900,
@@ -249,19 +246,12 @@ VALIDATION_TIMEOUTS = {
 }
 
 
-def _timeout_problems(label: str, timeout: int, command: list[str], exc: subprocess.TimeoutExpired) -> list[str]:
-    def tail(raw: object) -> str:
-        if not isinstance(raw, str):
-            return ""
-        return raw.strip()[-400:]
-
-    return [
-        f"{label}: timed out after {timeout}s; command: {' '.join(command)[-300:]}; "
-        f"stdout: {tail(exc.stdout)}; stderr: {tail(exc.stderr)}"
-    ]
-
-
 def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
+    from tools.aiwf_run_guard.procutil import (
+        ProcessTimedOutError,
+        run_process_tree_or_raise,
+    )
+
     problems: list[str] = []
     env = {
         **os.environ,
@@ -279,19 +269,15 @@ def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
         timeout: int,
     ) -> None:
         try:
-            completed = subprocess.run(
+            completed = run_process_tree_or_raise(
                 command,
                 cwd=extracted,
                 env=env,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
                 timeout=timeout,
+                label=label,
             )
-        except subprocess.TimeoutExpired as exc:
-            problems.extend(_timeout_problems(label, timeout, command, exc))
+        except ProcessTimedOutError as exc:
+            problems.append(str(exc))
             return
         if completed.returncode not in expected:
             problems.append(
@@ -314,21 +300,15 @@ def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
         "json",
     ]
     try:
-        doctor = subprocess.run(
+        doctor = run_process_tree_or_raise(
             doctor_command,
             cwd=extracted,
             env=env,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=VALIDATION_TIMEOUTS["doctor"],
+            label="doctor",
         )
-    except subprocess.TimeoutExpired as exc:
-        problems.extend(
-            _timeout_problems("doctor", VALIDATION_TIMEOUTS["doctor"], doctor_command, exc)
-        )
+    except ProcessTimedOutError as exc:
+        problems.append(str(exc))
         return problems
     if doctor.returncode not in {0, 1}:
         problems.append(f"doctor: exit {doctor.returncode} (expected 0 or 1)")

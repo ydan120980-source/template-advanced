@@ -100,6 +100,12 @@ database that passes `quick_check` and contains at least one recognized
 candidate table such as `nodes` or `edges` — not a complete
 schema-compatibility guarantee.
 
+The project's committed Codex configuration keeps safe defaults:
+`approval_policy = "on-request"`, `sandbox_mode = "workspace-write"`, and
+network access off unless the repository owner explicitly opts in. Template
+Doctor's `config.safe_defaults` rule blocks a release when the committed
+configuration departs from those defaults.
+
 ## Template Doctor
 
 ```bash
@@ -151,8 +157,13 @@ On Windows Git Bash, substitute `python3` with `py -3`. The builder uses an
 explicit top-level allowlist and auditable exclusion rules shared with Template
 Doctor, records relative path, size, SHA-256, and intended POSIX mode for every
 file, and writes a fixed-timestamp ZIP so repeated builds are byte-identical.
-Add `--validate` to extract into a clean directory and re-run the full
-validation suite there.
+Inside a Git work tree, the builder reads every release file from the Git
+object database at HEAD and refuses to build while any release file is
+untracked, deleted, or differs from HEAD — a dirty workspace can never leak
+into a published archive. Outside a Git work tree the builder refuses by
+default and requires `--allow-unverified`, labeling the result an
+unverified-source-tree build. Add `--validate` to extract into a clean
+directory and re-run the full validation suite there.
 
 ## Verify A Downloaded Archive
 
@@ -193,7 +204,8 @@ The public repository runs three workflows:
 
 - `ci.yml` — Ubuntu, Windows, and macOS runners with Python 3.11, 3.12, and
   3.13; setup, unit tests, verify, evals, and the Doctor CI gate.
-- `release-artifacts.yml` — deterministic double build, archive verification,
+- `release-artifacts.yml` — clean-commit release integration (double build,
+  byte comparison, full clean-extraction validation), archive verification,
   `SHA256SUMS`, and Release attachment on `v*` tags.
 - `security.yml` — CodeQL, credential scanning, and documentation
   local-path hygiene.
@@ -224,6 +236,14 @@ change rules, and local validation requirements.
 
 ## Current Limitations
 
+- Release builds require a clean Git commit: the builder reads release files
+  from the Git object database at HEAD and refuses dirty, untracked, or
+  deleted release files. Non-Git trees must opt in with
+  `--allow-unverified`, which labels the archive as an unverified-source-tree
+  build.
+- The unit-test suite runs only fast, directed tests; the full release
+  validation (recursive setup/verify/evals/doctor on a clean extraction) runs
+  in `scripts/integration-test-release.sh`, which release CI executes.
 - CodeGraph is an optional maintainer capability; no index is committed and
   no tool was available to verify real indexing in this environment. Without
   an index, Template Doctor reports `skip/info` by default and `fail/error`
