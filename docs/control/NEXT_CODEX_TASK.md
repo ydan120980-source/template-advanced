@@ -3,8 +3,7 @@
 Task ID: `TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02`
 Task Size: Small
 Workflow Mode: Lite
-Status: implementation and validation complete; awaiting local commit and
-User review
+Status: implementation and validation complete; awaiting User review
 
 The released template onboarding baseline remains identified as
 `TEMPLATE-ONBOARDING-V1`; this bounded maintenance packet supersedes it only
@@ -54,6 +53,12 @@ CodeGraph, CI pinning, release-inventory, or deterministic-build contracts.
   POSIX-only session behavior.
 - Timeout tests assert the actual command and preserve parent/child cleanup
   coverage.
+- Run Guard process pipes are explicitly closed on normal, nonzero, timeout,
+  and cleanup paths without dropping captured output; strict ResourceWarning
+  regression coverage is required.
+- `scripts/integration-test-release.sh` uses the shared process-tree helper for
+  every long-running stage, with named bounded timeouts, bounded output tails,
+  explicit clean-HEAD rebuild comparison, and CodeGraph rejection checks.
 - `.claude/settings.local.json` is precisely ignored; source delivery uses
   `git archive --format=zip ... HEAD`, distinct from the release builder.
 - Git blob batch-reader stdin, stdout, and stderr are closed on all exit paths

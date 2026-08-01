@@ -26,6 +26,7 @@ from typing import Sequence
 
 
 DEFAULT_TIMEOUT_SECONDS = 60
+SHORT_REAP_TIMEOUT_SECONDS = 5
 
 _WINDOWS_CREATION_FLAGS = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
@@ -114,34 +115,42 @@ def _terminate_tree(process: subprocess.Popen) -> None:
             pass
 
 
-def _drain_pipes(process: subprocess.Popen) -> tuple[str, str]:
-    """Best-effort read of remaining pipe output without blocking forever."""
+def _close_process_pipes(process: subprocess.Popen) -> None:
+    """Close every parent-side pipe, including after a failed read."""
 
-    def drain(pipe: object, default: str) -> str:
+    for pipe in (process.stdin, process.stdout, process.stderr):
         if pipe is None:
-            return default
-        chunks: list[str] = []
+            continue
         try:
-            while True:
-                chunk = pipe.read(65536)
-                if not chunk:
-                    break
-                chunks.append(chunk)
+            pipe.close()
         except (OSError, ValueError):
             pass
-        return "".join(chunks)
 
-    if process.stdout is None or process.stderr is None:
-        return "", ""
+
+def _reap_process(process: subprocess.Popen) -> None:
+    """Kill and reap a process that survived the normal cleanup path."""
+
+    if process.poll() is None:
+        try:
+            process.kill()
+        except (OSError, ProcessLookupError):
+            pass
     try:
-        stdout_text = drain(process.stdout, "")
-    except Exception:
-        stdout_text = ""
-    try:
-        stderr_text = drain(process.stderr, "")
-    except Exception:
-        stderr_text = ""
-    return stdout_text, stderr_text
+        process.wait(timeout=SHORT_REAP_TIMEOUT_SECONDS)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _output_as_text(value: object, encoding: str, errors: str) -> str:
+    """Normalize text and byte output returned by real or mocked Popen."""
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode(encoding, errors)
+    return str(value)
 
 
 def run_process_tree(
@@ -178,18 +187,44 @@ def run_process_tree(
             creation_flags |= getattr(subprocess, "CREATE_NO_WINDOW", 0)
         popen_kwargs["creationflags"] = creation_flags
 
-    process = subprocess.Popen(list(command), **popen_kwargs)
+    process: subprocess.Popen[str] | None = None
+    stdout_value: object = ""
+    stderr_value: object = ""
+    timed_out = False
     try:
-        stdout_bytes, stderr_bytes = process.communicate(timeout=timeout)
-        timed_out = False
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        _terminate_tree(process)
-        stdout_bytes, stderr_bytes = _drain_pipes(process)
+        process = subprocess.Popen(list(command), **popen_kwargs)
+        try:
+            stdout_value, stderr_value = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as timeout_error:
+            timed_out = True
+            _terminate_tree(process)
+            try:
+                # A second bounded communicate collects output already buffered
+                # by the first call and closes the streams without a manual,
+                # potentially blocking read of either pipe.
+                stdout_value, stderr_value = process.communicate(
+                    timeout=SHORT_REAP_TIMEOUT_SECONDS
+                )
+            except (OSError, ValueError, subprocess.TimeoutExpired) as reap_error:
+                stdout_value = (
+                    getattr(reap_error, "output", None)
+                    or timeout_error.output
+                    or ""
+                )
+                stderr_value = (
+                    getattr(reap_error, "stderr", None)
+                    or timeout_error.stderr
+                    or ""
+                )
+    finally:
+        if process is not None:
+            _close_process_pipes(process)
+            _reap_process(process)
+
     return ProcessResult(
-        returncode=process.returncode,
-        stdout=stdout_bytes if isinstance(stdout_bytes, str) else stdout_bytes.decode(encoding, errors),
-        stderr=stderr_bytes if isinstance(stderr_bytes, str) else stderr_bytes.decode(encoding, errors),
+        returncode=process.returncode if process is not None else None,
+        stdout=_output_as_text(stdout_value, encoding, errors),
+        stderr=_output_as_text(stderr_value, encoding, errors),
         timed_out=timed_out,
     )
 

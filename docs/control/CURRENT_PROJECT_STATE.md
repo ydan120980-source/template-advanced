@@ -53,7 +53,8 @@ Packet scope, budgets, validation, or stop conditions.
   release validation (setup/verify/evals/doctor on a clean extraction) runs
   in `scripts/integration-test-release.sh`, which release CI executes. All
   validation subprocesses run under bounded timeouts with whole-process-tree
-  termination.
+  termination, and the shared process helper explicitly closes its parent-side
+  pipes on every exit path.
 - The project is licensed under the Apache License 2.0 (`LICENSE`, `NOTICE`).
 - The public repository has a Git baseline with `main` as the default branch;
   CI runs on Ubuntu, Windows, and macOS for Python 3.11, 3.12, and 3.13.
@@ -83,7 +84,8 @@ Packet scope, budgets, validation, or stop conditions.
 - [x] Heavy release validation split: the unit suite runs fast directed tests
   only; the recursive full validation lives in
   `scripts/integration-test-release.sh`, and every validation subprocess runs
-  with bounded timeouts and whole-process-tree termination.
+  with bounded timeouts and whole-process-tree termination. The integration
+  runner uses named stage bounds, bounded output tails, and the shared helper.
 - [x] Bytecode-write guards so validation runs leave no `__pycache__`.
 - [x] Apache License 2.0, NOTICE, community files, Dependabot, and GitHub
   Actions CI, release-artifacts, and security workflows.
@@ -145,19 +147,29 @@ A follow-up sprint named the check a conservative heuristic: databases with
 `quick_check` succeeds, while databases with no recognized candidate table
 remain blocking, and no complete-schema guarantee is claimed.
 
+The final release-hygiene closeout explicitly closes the Run Guard process
+pipes after normal, nonzero, timeout, and cleanup paths while preserving
+captured output. `scripts/integration-test-release.sh` now uses the shared
+process-tree helper for every external stage, with explicit build, archive,
+full-validation, corrupted-CodeGraph, and clean-HEAD rebuild stages. The Git
+source archive remains a HEAD-content delivery mechanism; its ZIP byte form
+may vary across Git, zlib, and operating systems, while custom release
+artifacts retain their cross-platform byte-determinism contract.
+
 ## 9. Current Sprint
 
 - **Task ID:** `TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02`
 - **Mode:** Lite
-- **State:** implementation and validation complete; awaiting local commit and
-  User review
-- **Scope:** restore platform-specific Popen arguments, verify timeout tree
-  cleanup, exclude local Claude state from source delivery, close Git blob
-  pipes, and document Git-based source archives.
+- **State:** implementation and validation complete; awaiting User review
+- **Scope:** restore platform-specific Popen arguments, close all Run Guard
+  process pipes, bound every Release integration stage through the shared
+  process-tree helper, preserve timeout/tree cleanup, exclude local Claude
+  state from source delivery, and document Git-based source archives without a
+  cross-platform ZIP-byte claim.
 
 ## 10. State Freshness
 
-- **Last Updated:** 2026-08-01
+- **Last Updated:** 2026-08-02
 - **Based On Commit:** manual record — refresh after each accepted sprint
 - **Current Git HEAD:** manual record — refresh after each accepted sprint
 - **Is state stale?**: no

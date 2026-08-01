@@ -1,6 +1,6 @@
 # CHATGPT_HANDOFF.md
 
-Last Updated: 2026-08-01
+Last Updated: 2026-08-02
 Based On State Version: v2.0
 
 ## New-Session Summary
@@ -8,8 +8,8 @@ Based On State Version: v2.0
 - **Current phase:** RELEASED — v1.0.0 published under Apache License 2.0
 - **Current axis:** public, auditable, reproducible template
 - **Current Sprint:** `TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02` (restore
-  POSIX process execution and clean source delivery) — implementation and
-  validation complete; awaiting local commit and User review
+  POSIX process execution, close all process pipes, and bound Release
+  integration) — implementation and validation complete; awaiting User review
 - **Default action:** follow `docs/control/NEXT_CODEX_TASK.md` (the onboarding
   packet) to initialize a real project; keep `bash scripts/verify.sh`,
   `bash evals/run-evals.sh`, and Template Doctor green.
@@ -31,14 +31,21 @@ Based On State Version: v2.0
 - The unit-test suite runs fast directed tests only; the recursive full
   release validation runs in `scripts/integration-test-release.sh`, which
   release CI executes. Validation subprocesses have bounded timeouts and
-  whole-process-tree termination.
+  whole-process-tree termination. The integration runner uses the shared
+  process helper for named stages and reports bounded output tails on failure.
+- Run Guard process launches explicitly close stdin, stdout, and stderr on
+  normal, nonzero, timeout, and cleanup paths while preserving output; strict
+  `ResourceWarning` regression tests cover repeated timeouts and pipe state.
 - POSIX process launches pass `start_new_session=True` without the Windows-only
   `creationflags` keyword; Windows uses its process-group creation flag.
   Timeout errors identify the actual command, and the Git blob batch reader
   closes all three pipes.
 - Source deliveries use `git archive HEAD`, which excludes `.git/`, untracked
-  local state such as `.claude/settings.local.json`, caches, and build output;
-  formal release archives still come from `scripts/build-release.py`.
+  local state such as `.claude/settings.local.json`, caches, and build output.
+  Its ZIP byte representation may vary across Git, zlib, or operating-system
+  implementations; formal release archives from `scripts/build-release.py`
+  retain the cross-platform byte-determinism guarantee. Do not distribute a
+  ZIP made by compressing the working directory.
 - CI runs on Ubuntu, Windows, and macOS; release artifacts are attached to
   `v*` tags by the release-artifacts workflow.
 - CodeGraph is optional; `docs/architecture/CODEGRAPH.md` documents the

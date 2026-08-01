@@ -8,6 +8,21 @@ release tags exist.
 
 ### Changed
 
+- Process-tree runs now explicitly close stdin, stdout, and stderr on every
+  normal, nonzero, timeout, and cleanup path while preserving captured output.
+  ResourceWarning regression coverage includes repeated short timeouts and
+  mocked pipe-state assertions.
+- `scripts/integration-test-release.sh` now routes every release stage through
+  the shared bounded process-tree helper. Named stages use practical timeouts,
+  retain the bytecode and recursion guards, and report the command, timeout,
+  exit code, and bounded stdout/stderr tails on failure.
+- Release integration now performs explicit basic archive validation, complete
+  clean-extraction validation, corrupted-CodeGraph rejection, and a clean-HEAD
+  rebuild comparison.
+- The Git source archive is documented as a committed-HEAD content snapshot,
+  not a cross-platform byte-deterministic ZIP. Formal release artifacts from
+  `scripts/build-release.py` retain the cross-platform byte-determinism
+  guarantee. Workspace-compressed ZIP files are not supported for delivery.
 - Restored platform-specific process creation arguments: POSIX runs use only
   `start_new_session=True`, while Windows retains its process-group creation
   flag. Timeout tests now assert the actual command, and process-tree cleanup

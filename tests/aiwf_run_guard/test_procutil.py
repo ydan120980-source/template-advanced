@@ -9,12 +9,14 @@ host.
 
 from __future__ import annotations
 
+import gc
 import os
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+import warnings
 from unittest import mock
 
 from tools.aiwf_run_guard.procutil import (
@@ -95,28 +97,106 @@ class ProcessTreeTimeoutTests(unittest.TestCase):
         self.assertIsNotNone(result.returncode)
 
     def test_completed_command_returns_zero_and_not_timed_out(self) -> None:
-        result = run_process_tree(
-            [sys.executable, "-c", "print('ok')"],
-            timeout=30,
-            label="quick",
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("error", ResourceWarning)
+            result = run_process_tree(
+                [sys.executable, "-c", "print('ok')"],
+                timeout=30,
+                label="quick",
+            )
+            gc.collect()
+        self.assertFalse(
+            [warning for warning in caught if issubclass(warning.category, ResourceWarning)]
         )
         self.assertEqual(result.returncode, 0)
         self.assertFalse(result.timed_out)
         self.assertEqual(result.stdout.strip(), "ok")
 
     def test_nonzero_command_preserves_stdout_and_stderr(self) -> None:
-        result = run_process_tree(
-            [
-                sys.executable,
-                "-c",
-                "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)",
-            ],
-            timeout=30,
-            label="nonzero",
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("error", ResourceWarning)
+            result = run_process_tree(
+                [
+                    sys.executable,
+                    "-c",
+                    "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)",
+                ],
+                timeout=30,
+                label="nonzero",
+            )
+            gc.collect()
+        self.assertFalse(
+            [warning for warning in caught if issubclass(warning.category, ResourceWarning)]
         )
         self.assertEqual(result.returncode, 3)
         self.assertEqual(result.stdout.strip(), "out")
         self.assertEqual(result.stderr.strip(), "err")
+
+    def test_timeout_preserves_partial_stdout_and_stderr(self) -> None:
+        command = [
+            sys.executable,
+            "-c",
+            (
+                "import sys, time; print('before', flush=True); "
+                "print('err-before', file=sys.stderr, flush=True); time.sleep(60)"
+            ),
+        ]
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("error", ResourceWarning)
+            result = run_process_tree(command, timeout=1, label="partial-output")
+            gc.collect()
+        self.assertFalse(
+            [warning for warning in caught if issubclass(warning.category, ResourceWarning)]
+        )
+        self.assertTrue(result.timed_out)
+        self.assertIn("before", result.stdout)
+        self.assertIn("err-before", result.stderr)
+
+    def test_repeated_timeouts_have_no_resource_warnings(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("error", ResourceWarning)
+            for attempt in range(3):
+                with self.assertRaises(ProcessTimedOutError):
+                    run_process_tree_or_raise(
+                        _sleep_command(60),
+                        timeout=1,
+                        label=f"repeat-timeout-{attempt}",
+                    )
+            gc.collect()
+        self.assertFalse(
+            [warning for warning in caught if issubclass(warning.category, ResourceWarning)]
+        )
+
+    def test_all_pipes_close_after_timeout_cleanup(self) -> None:
+        with mock.patch("tools.aiwf_run_guard.procutil.subprocess.Popen") as popen:
+            process = popen.return_value
+            process.stdin = mock.Mock()
+            process.stdout = mock.Mock()
+            process.stderr = mock.Mock()
+            process.communicate.side_effect = [
+                subprocess.TimeoutExpired(
+                    [sys.executable, "-c", "pass"],
+                    1,
+                    output="partial-out",
+                    stderr="partial-err",
+                ),
+                ("partial-out", "partial-err"),
+            ]
+            process.returncode = -15
+            process.poll.return_value = -15
+            with mock.patch("tools.aiwf_run_guard.procutil._terminate_tree"):
+                result = run_process_tree(
+                    [sys.executable, "-c", "pass"],
+                    timeout=1,
+                    label="mock-timeout",
+                )
+
+        self.assertTrue(result.timed_out)
+        self.assertEqual(result.stdout, "partial-out")
+        self.assertEqual(result.stderr, "partial-err")
+        process.stdin.close.assert_called_once_with()
+        process.stdout.close.assert_called_once_with()
+        process.stderr.close.assert_called_once_with()
 
     def test_tree_kill_leaves_no_residual_processes(self) -> None:
         """A killed tree must not leave descendants running afterwards."""

@@ -278,3 +278,65 @@ Suggested Next Step:
   corrected public release such as v1.0.1 should be prepared; do not publish
   automatically.
 ```
+
+```text
+Evidence Ledger
+
+Sprint ID: TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02-CLOSEOUT
+Date: 2026-08-02
+Repo: template-advanced
+Task Size: Small
+Workflow Mode: Lite
+
+Decision Note:
+- Why Lite is sufficient: this is a bounded leak-prevention and release
+  integration hardening change over existing process-tree, trusted-source,
+  CodeGraph, and deterministic-build contracts. It adds no dependency,
+  product axis, CI change, or publication action.
+- CodeGraph exploration was unavailable in the current host; source
+  inspection, targeted rg searches, focused tests, and release validation are
+  the evidence sources.
+
+Files Changed:
+- tools/aiwf_run_guard/procutil.py: timeout cleanup now uses bounded
+  communicate, then closes all parent-side pipes and reaps the child in one
+  finally path while preserving captured output.
+- tests/aiwf_run_guard/test_procutil.py: strict ResourceWarning coverage for
+  normal, nonzero, partial-output timeout, repeated timeout, and mocked pipe
+  closure paths.
+- scripts/integration-test-release.sh: shared bounded process-tree runner,
+  named release stages, practical timeout constants, bounded failure tails,
+  recursion/bytecode environment guards, and clean-HEAD comparison.
+- tests/release_readiness/test_integration_runner.py: fast shared-runner and
+  integration-script contract coverage without launching the full release
+  chain.
+- README.md, CHANGELOG.md, docs/ai-workflow/GITHUB_RELEASE_READINESS.md, and
+  docs/control/: Git HEAD source-archive traceability, workspace-ZIP warning,
+  process-pipe closeout, and release-integration bounds.
+
+Commands Actually Run:
+- Initial Git status, branch, history, HEAD, remote-ahead/behind, scoped
+  status, and diff checks.
+- Focused process and integration-runner unittest suites.
+- Strict ResourceWarning process-helper unittest suite.
+- Git Bash syntax check for scripts/integration-test-release.sh.
+
+Validation Result:
+- Focused regression validation passed before the local commit; the complete
+  clean-HEAD release matrix is recorded in the final Evidence Ledger and is
+  not represented here as a numeric status claim.
+
+Scope Check:
+- No `.git/`, release output, cache, temporary directory, dependency, CI,
+  secret, tag, Release, or remote-push change is included.
+
+Remaining Risks:
+- Real CodeGraph indexing remains unverified because no CodeGraph tool is
+  available in this environment.
+- The public `v1.0.0` tag remains unchanged; publishing a corrected public
+  release requires a separate owner decision.
+
+Suggested Next Step:
+- Review the local closeout commit and decide separately whether to prepare a
+  corrected public release; do not push or publish automatically.
+```
