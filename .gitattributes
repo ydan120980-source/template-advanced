@@ -1,6 +1,6 @@
 # Repository text is normalized to LF so release bytes are identical on every
-# checkout platform. The explicitly listed Windows PowerShell script keeps
-# CRLF endings.
+# checkout platform, including PowerShell scripts. Line-ending variants in a
+# checked-out tree must never change published artifact bytes.
 * text eol=lf
 
 *.md text eol=lf
@@ -11,8 +11,6 @@
 *.toml text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
-*.ps1 text eol=crlf
-
 *.png binary
 *.jpg binary
 *.jpeg binary

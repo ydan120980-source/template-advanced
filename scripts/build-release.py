@@ -10,7 +10,8 @@ The builder selects files with the canonical allowlist and exclusion rules in
 SHA-256, and intended POSIX mode for every entry, and writes:
 
 - ``dist/template-advanced-<version>.zip`` (fixed timestamps, sorted entries,
-  explicit Unix modes, fixed deflate level);
+  explicit Unix modes, no compression so bytes are identical on every
+  platform);
 - ``dist/template-advanced-<version>.manifest.json`` (machine-readable);
 - ``dist/template-advanced-<version>.digest.txt`` (publication digest).
 
@@ -77,12 +78,11 @@ def main(argv: list[str] | None = None) -> int:
     with zipfile.ZipFile(
         archive_path,
         mode="w",
-        compression=zipfile.ZIP_DEFLATED,
-        compresslevel=9,
+        compression=zipfile.ZIP_STORED,
     ) as archive:
         for entry in entries:
             info = zipfile.ZipInfo(entry.path, date_time=FIXED_TIMESTAMP)
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED
             info.create_system = 3  # Unix metadata so modes survive extraction
             info.external_attr = (entry.mode & 0xFFFF) << 16
             archive.writestr(info, (root / entry.path).read_bytes())

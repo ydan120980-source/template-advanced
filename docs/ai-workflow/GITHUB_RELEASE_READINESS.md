@@ -46,7 +46,8 @@ itself and to every project initialized from it.
 release inventory shared with Template Doctor:
 
 - explicit top-level allowlist plus auditable local-state exclusions;
-- stable sorting, fixed timestamps, fixed compression, and explicit Unix modes;
+- stable sorting, fixed timestamps, platform-independent storage (no
+  compression), and explicit Unix modes;
 - relative path, byte size, SHA-256, and intended mode for every entry;
 - a deterministic publication digest, so two builds from the same tree are
   byte-identical.
