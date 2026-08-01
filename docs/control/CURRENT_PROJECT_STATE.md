@@ -93,9 +93,10 @@ Packet scope, budgets, validation, or stop conditions.
 1. Keep the `main` branch green across the CI matrix.
 2. Keep the release artifact digest and manifest aligned with the source tree
    on every tag.
-3. Initialize CodeGraph when a maintainer tool is available and verify it with
+3. Keep POSIX and Windows process-tree validation bounded and leak-free.
+4. Initialize CodeGraph when a maintainer tool is available and verify it with
    anchored queries (documented in `docs/architecture/CODEGRAPH.md`).
-4. Add regression tests for every behavior change.
+5. Add regression tests for every behavior change.
 
 ## 6. Active Risks And Mitigations
 
@@ -146,10 +147,13 @@ remain blocking, and no complete-schema guarantee is claimed.
 
 ## 9. Current Sprint
 
-- **Task ID:** `CODEX-CLEAN-RELEASE-SAFE-DEFAULTS-2026-08-01` (clean release
-  sources and safe Codex defaults)
+- **Task ID:** `TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02`
 - **Mode:** Lite
-- **State:** validation complete; awaiting commit and User review
+- **State:** implementation and validation complete; awaiting local commit and
+  User review
+- **Scope:** restore platform-specific Popen arguments, verify timeout tree
+  cleanup, exclude local Claude state from source delivery, close Git blob
+  pipes, and document Git-based source archives.
 
 ## 10. State Freshness
 

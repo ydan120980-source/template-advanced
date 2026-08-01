@@ -174,11 +174,12 @@ def _read_blobs_at_commit(
                     )
                 contents[path] = data
         finally:
-            try:
-                if process.stdin is not None:
-                    process.stdin.close()
-            except OSError:
-                pass
+            for pipe in (process.stdin, process.stdout, process.stderr):
+                try:
+                    if pipe is not None:
+                        pipe.close()
+                except (OSError, ValueError):
+                    pass
             try:
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:

@@ -11,6 +11,7 @@ small while still traversing the real release inventory selection.
 from __future__ import annotations
 
 import json
+import gc
 import os
 from pathlib import Path
 import shutil
@@ -18,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 
 from tools.template_doctor.release_source import resolve_release_source
 
@@ -120,6 +122,21 @@ def _zip_entry(archive_path: Path, entry_path: str) -> bytes:
 
 class ReleaseSourceGateTests(unittest.TestCase):
     maxDiff = None
+
+    def test_blob_pipe_closes_without_resource_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = _make_fixture_root(Path(temporary_directory) / "repo")
+            _commit_all(root)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", ResourceWarning)
+                for _ in range(3):
+                    resolve_release_source(root)
+                gc.collect()
+
+        resource_warnings = [
+            warning for warning in caught if warning.category is ResourceWarning
+        ]
+        self.assertEqual(resource_warnings, [])
 
     def test_uncommitted_dirty_release_file_blocks_build(self) -> None:
         """P0-1: a dirty tracked release file must block the build."""

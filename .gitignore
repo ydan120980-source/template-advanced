@@ -54,6 +54,7 @@ logs/
 *.pid.lock
 
 # Codex host-local runtime state (project configuration remains tracked)
+.claude/settings.local.json
 .codex/session*
 .codex/tmp*
 .codex/cache*

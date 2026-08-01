@@ -161,22 +161,24 @@ def run_process_tree(
     ``timed_out=True`` with whatever output was captured so far.
     """
 
-    creation_flags = _WINDOWS_CREATION_FLAGS
-    if creation_flags:
-        creation_flags |= getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    popen_kwargs: dict[str, object] = {
+        "cwd": str(cwd) if cwd is not None else None,
+        "env": env,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": text,
+        "encoding": encoding,
+        "errors": errors,
+    }
+    if _POSIX:
+        popen_kwargs["start_new_session"] = True
+    else:
+        creation_flags = _WINDOWS_CREATION_FLAGS
+        if creation_flags:
+            creation_flags |= getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        popen_kwargs["creationflags"] = creation_flags
 
-    process = subprocess.Popen(
-        list(command),
-        cwd=str(cwd) if cwd is not None else None,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=text,
-        encoding=encoding,
-        errors=errors,
-        start_new_session=True if _POSIX else False,
-        creationflags=creation_flags if creation_flags else None,
-    )
+    process = subprocess.Popen(list(command), **popen_kwargs)
     try:
         stdout_bytes, stderr_bytes = process.communicate(timeout=timeout)
         timed_out = False

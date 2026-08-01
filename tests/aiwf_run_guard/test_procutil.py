@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from tools.aiwf_run_guard.procutil import (
     ProcessResult,
@@ -39,18 +40,49 @@ class ProcessTreeTimeoutTests(unittest.TestCase):
     maxDiff = None
 
     def test_timeout_reports_label_command_and_duration(self) -> None:
+        command = _sleep_command(60)
         with self.assertRaises(ProcessTimedOutError) as captured:
             run_process_tree_or_raise(
-                _sleep_command(60),
+                command,
                 timeout=2,
                 label="staging",
             )
         error = captured.exception
         self.assertEqual(error.label, "staging")
         self.assertEqual(error.timeout, 2)
+        self.assertEqual(error.command, command)
         message = str(error)
         self.assertIn("staging: timed out after 2s", message)
-        self.assertIn("python", message)
+        self.assertIn(command[0], message)
+
+    def test_posix_popen_omits_windows_only_creationflags(self) -> None:
+        if os.name != "posix":
+            self.skipTest("POSIX-specific Popen contract")
+
+        real_popen = subprocess.Popen
+        with mock.patch("tools.aiwf_run_guard.procutil.subprocess.Popen") as popen:
+            process = popen.return_value
+            process.communicate.return_value = ("", "")
+            process.returncode = 0
+            run_process_tree([sys.executable, "-c", "pass"], timeout=5)
+
+        kwargs = popen.call_args.kwargs
+        self.assertTrue(kwargs["start_new_session"])
+        self.assertNotIn("creationflags", kwargs)
+        self.assertIsNot(real_popen, popen)
+
+    def test_windows_popen_uses_process_group_flag(self) -> None:
+        with mock.patch("tools.aiwf_run_guard.procutil._POSIX", False), mock.patch(
+            "tools.aiwf_run_guard.procutil._WINDOWS_CREATION_FLAGS", 0x200
+        ), mock.patch("tools.aiwf_run_guard.procutil.subprocess.Popen") as popen:
+            process = popen.return_value
+            process.communicate.return_value = ("", "")
+            process.returncode = 0
+            run_process_tree([sys.executable, "-c", "pass"], timeout=5)
+
+        kwargs = popen.call_args.kwargs
+        self.assertTrue(kwargs["creationflags"] & 0x200)
+        self.assertNotIn("start_new_session", kwargs)
 
     def test_timeout_returns_result_with_timed_out_flag(self) -> None:
         result = run_process_tree(
@@ -71,6 +103,20 @@ class ProcessTreeTimeoutTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertFalse(result.timed_out)
         self.assertEqual(result.stdout.strip(), "ok")
+
+    def test_nonzero_command_preserves_stdout_and_stderr(self) -> None:
+        result = run_process_tree(
+            [
+                sys.executable,
+                "-c",
+                "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)",
+            ],
+            timeout=30,
+            label="nonzero",
+        )
+        self.assertEqual(result.returncode, 3)
+        self.assertEqual(result.stdout.strip(), "out")
+        self.assertEqual(result.stderr.strip(), "err")
 
     def test_tree_kill_leaves_no_residual_processes(self) -> None:
         """A killed tree must not leave descendants running afterwards."""

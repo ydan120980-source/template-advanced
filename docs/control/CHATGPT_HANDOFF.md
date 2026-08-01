@@ -7,9 +7,9 @@ Based On State Version: v2.0
 
 - **Current phase:** RELEASED — v1.0.0 published under Apache License 2.0
 - **Current axis:** public, auditable, reproducible template
-- **Current Sprint:** `CODEX-CLEAN-RELEASE-SAFE-DEFAULTS-2026-08-01` (clean
-  release sources and safe Codex defaults) — validation complete; awaiting
-  commit and User review
+- **Current Sprint:** `TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02` (restore
+  POSIX process execution and clean source delivery) — implementation and
+  validation complete; awaiting local commit and User review
 - **Default action:** follow `docs/control/NEXT_CODEX_TASK.md` (the onboarding
   packet) to initialize a real project; keep `bash scripts/verify.sh`,
   `bash evals/run-evals.sh`, and Template Doctor green.
@@ -32,6 +32,13 @@ Based On State Version: v2.0
   release validation runs in `scripts/integration-test-release.sh`, which
   release CI executes. Validation subprocesses have bounded timeouts and
   whole-process-tree termination.
+- POSIX process launches pass `start_new_session=True` without the Windows-only
+  `creationflags` keyword; Windows uses its process-group creation flag.
+  Timeout errors identify the actual command, and the Git blob batch reader
+  closes all three pipes.
+- Source deliveries use `git archive HEAD`, which excludes `.git/`, untracked
+  local state such as `.claude/settings.local.json`, caches, and build output;
+  formal release archives still come from `scripts/build-release.py`.
 - CI runs on Ubuntu, Windows, and macOS; release artifacts are attached to
   `v*` tags by the release-artifacts workflow.
 - CodeGraph is optional; `docs/architecture/CODEGRAPH.md` documents the

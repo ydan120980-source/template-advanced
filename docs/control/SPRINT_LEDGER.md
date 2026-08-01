@@ -217,3 +217,64 @@ Follow-up:
 - Real CodeGraph indexing remains unverified; no CodeGraph tool was
   available in this environment
 ```
+
+```text
+Evidence Ledger
+
+Sprint ID: TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02
+Date: 2026-08-02
+Repo: template-advanced
+Task Size: Small
+Workflow Mode: Lite
+
+Decision Note:
+- Why Lite is sufficient: this is a bounded regression and delivery-hygiene
+  fix over existing process, trusted-source, inventory, and CodeGraph
+  contracts; it adds no dependency, product axis, or publication action.
+- CodeGraph exploration was unavailable in the current host, so anchored
+  source inspection, rg, targeted tests, and release validation are the
+  evidence sources.
+
+Files Changed:
+- tools/aiwf_run_guard/procutil.py: assemble Popen process-group arguments by
+  platform; POSIX omits Windows-only creationflags.
+- tests/aiwf_run_guard/test_procutil.py: actual-command timeout assertion,
+  cross-platform Popen keyword contract tests, and nonzero output coverage.
+- tools/template_doctor/release_source.py: close stdin, stdout, and stderr
+  for Git batch reads on all exit paths.
+- tests/release_readiness/test_release_source_gate.py: repeated blob-read
+  ResourceWarning regression coverage.
+- .gitignore: exact `.claude/settings.local.json` exclusion.
+- README.md, CHANGELOG.md, docs/ai-workflow/GITHUB_RELEASE_READINESS.md, and
+  docs/control/: source-archive distinction, hygiene contract, and handoff
+  state.
+
+Commands Actually Run:
+- Initial repository state checks: main at 6e8c905, clean before edits,
+  origin/main...HEAD = 0/7, no tracked local Claude settings.
+- CodeGraph availability probe: no callable codegraph_explore tool; fallback
+  source inspection used as authorized by the task.
+- Focused unittest command: passed after one bounded assertion correction;
+  the final run passed the process and release-source suites with one
+  platform-expected skip.
+- `rg` subprocess inventory and `git diff --check`: passed.
+
+Validation Result:
+- Implementation-focused validation passed; full release matrix remains to
+  be recorded in the final handoff after the local commit.
+
+Scope Check:
+- No `.git/`, `dist/`, cache, temporary, dependency, CI, secret, tag, Release,
+  or remote-push changes are included.
+
+Remaining Risks:
+- Real CodeGraph indexing remains unverified because no CodeGraph tool is
+  available in this environment.
+- Native POSIX execution will be additionally covered by the available
+  Git-Bash/Linux-compatible validation commands; macOS CI remains external.
+
+Suggested Next Step:
+- Review the committed local fix and decide separately whether a future
+  corrected public release such as v1.0.1 should be prepared; do not publish
+  automatically.
+```
