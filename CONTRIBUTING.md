@@ -40,9 +40,10 @@ py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.z
 
 `verify.sh` runs lint, the standard-library structural check (import and
 annotation contracts, not full semantic type inference), and the unit-test
-suites. Template Doctor may exit `1` solely for explicitly deferred external
-state such as a missing Git baseline or CodeGraph index. Invocation or
-operational exit `2` is always a failure.
+suites. Template Doctor may exit `1` solely for the explicitly deferred
+missing-Git-baseline finding; a missing CodeGraph index is an optional
+capability reported as a non-blocking `skip`. Invocation or operational exit
+`2` is always a failure.
 
 Before requesting review:
 

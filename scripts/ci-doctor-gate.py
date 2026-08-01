@@ -2,9 +2,13 @@
 """CI gate for Template Doctor.
 
 Runs Template Doctor against a checkout and passes only when every failed
-rule is an explicitly deferred external state (missing Git baseline or
-CodeGraph index). Unknown findings, project pollution, and release-rule
-failures block CI. Invocation or operational errors also block CI.
+rule is an explicitly deferred external state (a missing Git baseline).
+Unknown findings, project pollution, and release-rule failures block CI.
+CodeGraph is an optional capability: without an index the Doctor reports a
+non-blocking skip by default, so no CodeGraph allowlist entry is needed here;
+pass ``--strict`` to the Doctor when an index is a hard requirement. A corrupt
+or invalid CodeGraph database is always a blocking failure.
+Invocation or operational errors also block CI.
 
 Usage (from the repository root):
 
@@ -23,9 +27,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tools.template_doctor.policy import (  # noqa: E402
+    RELEASE_EXTRACTION_ALLOWED_FAILURES,
+)
 
 # Findings that are explicitly deferred external state and never block CI.
-ALLOWED_FINDINGS = frozenset({"git.baseline", "codegraph.initialized"})
+ALLOWED_FINDINGS = RELEASE_EXTRACTION_ALLOWED_FAILURES
 
 
 def _parser() -> argparse.ArgumentParser:

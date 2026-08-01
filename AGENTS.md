@@ -89,11 +89,12 @@ are not connected to the workflows above.
 - CI failure repair uses `.github/codex/prompts/fix-ci.md`.
 - Control-state gardening uses `.github/codex/prompts/garden-control-state.md`.
 
-Workflow files in `.github/workflows/` are placeholders and must be configured by the project owner before real use.
-
 ## Eval Harness
 
-Use `evals/` for reusable workflow test cases. `evals/run-evals.sh` is a safe placeholder that should be customized before enforcing evals in CI. Do not let eval setup modify the current branch or application code.
+Use `evals/` for reusable workflow test cases. `evals/run-evals.sh` runs the
+eight deterministic cases and is enforced in CI (`ci.yml` and
+`release-artifacts.yml`). Do not let eval setup modify the current branch or
+application code.
 
 ## Architecture Docs
 

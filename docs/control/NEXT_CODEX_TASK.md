@@ -53,8 +53,9 @@ py -3 scripts/build-release.py
 py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json
 ```
 
-Template Doctor exits `1` for the deferred Git baseline and CodeGraph index
-only; any other content failure must be fixed before declaring readiness.
+Template Doctor exits `1` for the deferred Git baseline only; a missing
+CodeGraph index is an optional capability reported as a non-blocking `skip`,
+and any other content failure must be fixed before declaring readiness.
 
 ## Stop Conditions
 

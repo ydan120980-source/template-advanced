@@ -12,7 +12,8 @@ contracts hold:
 - Release archives exclude local runtime state and bytecode, and two builds are
   byte-identical.
 - Doctor detects leaked local paths, and a clean extraction initializes with
-  only deferred Git/CodeGraph findings.
+  only the deferred Git baseline finding (CodeGraph is an optional capability
+  reported as a non-blocking skip).
 
 Expected outputs describe contracts rather than store full transcripts. Do not
 add secrets, private data, or machine-specific absolute paths.

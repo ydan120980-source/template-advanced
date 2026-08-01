@@ -22,7 +22,10 @@ Based On State Version: v2.0
 - CI runs on Ubuntu, Windows, and macOS; release artifacts are attached to
   `v*` tags by the release-artifacts workflow.
 - CodeGraph is optional; `docs/architecture/CODEGRAPH.md` documents the
-  portable configuration and honest verification status.
+  portable configuration and honest verification status. Template Doctor
+  reports an absent index as `skip/info` by default and `fail/error` under
+  `--strict`; a corrupt or invalid project-local database is always a
+  blocking failure, and no CI or release allowlist covers it.
 
 ## Boundaries
 

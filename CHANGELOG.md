@@ -4,6 +4,21 @@ All notable changes are recorded here. The project follows a
 `YYYY-MM-DD` release cadence with semantic versioning once a Git baseline and
 release tags exist.
 
+## Unreleased
+
+### Changed
+
+- CodeGraph detection now has three explicit states: absent index reports
+  `skip/info` by default and `fail/error` under `--strict`; a present but
+  corrupt or invalid database always reports `fail/error`; a valid database
+  reports `pass` with relative-path evidence.
+- CI and release-archive validation share one allowlist
+  (`RELEASE_EXTRACTION_ALLOWED_FAILURES`, only `git.baseline`); CodeGraph has
+  no failure allowlist anywhere.
+- Archive `--validate` reports stage, command, timeout, and output summaries
+  on timeout, and always removes its temporary extraction directory.
+- GitHub Actions pinned to full commit SHAs with version comments.
+
 ## [1.0.0] - 2026-08-01
 
 ### Added

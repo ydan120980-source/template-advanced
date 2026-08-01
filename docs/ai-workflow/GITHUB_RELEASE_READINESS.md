@@ -12,7 +12,8 @@ itself and to every project initialized from it.
 - [ ] All Run Guard, Template Doctor, and release-readiness `unittest` suites
   pass with bytecode generation disabled.
 - [ ] Template Doctor has no release-content failure beyond the explicitly
-  deferred Git baseline and CodeGraph index findings.
+  deferred missing-Git-baseline finding (a missing CodeGraph index is an
+  optional capability reported as a non-blocking `skip`).
 - [ ] The deterministic release build and the independent archive verifier
   pass, including the clean-extraction validation.
 - [ ] All project Skills validate; planning plan-doctor reports no failure.

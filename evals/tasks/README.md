@@ -27,8 +27,9 @@ bash evals/run-evals.sh
 7. `doctor-drift-detection` — a fixture with a leaked local path must make
    Template Doctor report the local-state drift rule as failed.
 8. `clean-template-init` — extract the built archive into a fresh directory,
-   run setup and Template Doctor there, and assert the only findings are the
-   deferred Git baseline and CodeGraph index.
+   run setup and Template Doctor there, and assert the only failing finding is
+   the deferred Git baseline; the CodeGraph index is an optional capability
+   reported as a non-blocking skip.
 
 Every case is read-only for the repository except the release cases, which
 write only to temporary directories. Temporary evidence is removed on exit.

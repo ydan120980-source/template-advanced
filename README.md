@@ -56,20 +56,33 @@ executable directly; the documented commands call `bash` by name so no Unix
 executable bit is required. On Linux and macOS the identical commands work
 natively.
 
+Python is invoked by platform throughout this document. On Linux and macOS use
+`python3`; on Windows Git Bash use `py -3`. On some Windows installations,
+`python` may resolve to the Microsoft Store / App Installer execution alias
+instead of a real Python interpreter and fail without running Python; Windows
+shells may report exit code 9009, while Git Bash or MSYS environments may
+surface the low-byte value 49:
+
+```bash
+python3 -m unittest discover -s tests        # Linux / macOS
+py -3 -m unittest discover -s tests          # Windows (Git Bash)
+```
+
 The validation commands never depend on `PYTHONDONTWRITEBYTECODE` being preset:
 the suite and the tools suppress bytecode writes themselves (`-B` and internal
 guards).
 
 ## Full Validation
 
-Run every command from the repository root and report each exit code:
+Run every command from the repository root and report each exit code. Substitute
+`python3` on Linux and macOS, `py -3` on Windows (Git Bash):
 
 ```bash
 bash scripts/setup.sh
-python -m unittest discover -s tests
+python3 -m unittest discover -s tests        # Windows: py -3
 bash scripts/verify.sh
 bash evals/run-evals.sh
-python -B -m tools.template_doctor --root . --format json
+python3 -B -m tools.template_doctor --root . --format json    # Windows: py -3
 ```
 
 `setup.sh` performs environment checks and installs nothing. `verify.sh` runs
@@ -78,20 +91,22 @@ not full semantic type inference), and the unit-test suites. The eval harness
 runs eight deterministic cases covering Run Guard, release determinism,
 Doctor drift detection, and clean-template initialization.
 
-Template Doctor exits `1` only for explicitly deferred external state (a
-missing Git baseline or CodeGraph index); the CI gate allows exactly those two
-findings and blocks on anything else.
+Template Doctor exits `1` only for a missing Git baseline (explicitly deferred
+external state); the CI gate allows exactly that finding and blocks on anything
+else. A missing CodeGraph index is an optional capability reported as a
+non-blocking `skip`; pass `--strict` to treat it as a blocking failure.
 
 ## Template Doctor
 
 ```bash
-python -B -m tools.template_doctor --root . --format json
-python -B -m tools.template_doctor --root . --format markdown
+python3 -B -m tools.template_doctor --root . --format json
+python3 -B -m tools.template_doctor --root . --format markdown
 ```
 
-The report is deterministic and includes a rule ID, severity, status, evidence,
-and recommendation for every check. Independent rules run through a bounded
-thread pool with at most four workers.
+On Windows Git Bash, substitute `python3` with `py -3`. The report is
+deterministic and includes a rule ID, severity, status, evidence, and
+recommendation for every check. Independent rules run through a bounded thread
+pool with at most four workers.
 
 Exit codes:
 
@@ -100,18 +115,20 @@ Exit codes:
 - `2`: invalid invocation or operational failure.
 
 CodeGraph is an optional maintainer capability: without an index, its Doctor
-rule reports a non-blocking finding that the CI gate explicitly allows. See
+rule reports a non-blocking `skip`; the CI gate passes without an allowlist
+entry. Use `--strict` when an index is a hard requirement. See
 [docs/architecture/CODEGRAPH.md](docs/architecture/CODEGRAPH.md).
 
 ## AIWF Run Guard
 
 ```bash
-python -B -m tools.aiwf_run_guard --help
-python -B -m tools.aiwf_run_guard preflight --root . --format json
+python3 -B -m tools.aiwf_run_guard --help
+python3 -B -m tools.aiwf_run_guard preflight --root . --format json
 ```
 
-The PowerShell wrapper `scripts/aiwf-run-guard.ps1` discovers Python in the
-order `py -3`, `python`, `python3` and requires Python 3.11 or newer.
+On Windows Git Bash, substitute `python3` with `py -3`. The PowerShell wrapper
+`scripts/aiwf-run-guard.ps1` discovers Python in the order `py -3`, `python`,
+`python3` and requires Python 3.11 or newer.
 
 The authoritative sprint plan remains `docs/control/NEXT_CODEX_TASK.md`;
 planning journals and Run Guard evidence cannot expand its scope or relax its
@@ -120,17 +137,18 @@ stop conditions. See [AIWF Run Guard](docs/ai-workflow/AIWF_RUN_GUARD.md).
 ## Build A Release
 
 ```bash
-python scripts/build-release.py
-python scripts/verify-release-archive.py \
+python3 scripts/build-release.py
+python3 scripts/verify-release-archive.py \
   --archive dist/template-advanced-1.0.0.zip \
   --manifest dist/template-advanced-1.0.0.manifest.json
 ```
 
-The builder uses an explicit top-level allowlist and auditable exclusion rules
-shared with Template Doctor, records relative path, size, SHA-256, and intended
-POSIX mode for every file, and writes a fixed-timestamp ZIP so repeated builds
-are byte-identical. Add `--validate` to extract into a clean directory and
-re-run the full validation suite there.
+On Windows Git Bash, substitute `python3` with `py -3`. The builder uses an
+explicit top-level allowlist and auditable exclusion rules shared with Template
+Doctor, records relative path, size, SHA-256, and intended POSIX mode for every
+file, and writes a fixed-timestamp ZIP so repeated builds are byte-identical.
+Add `--validate` to extract into a clean directory and re-run the full
+validation suite there.
 
 ## Verify A Downloaded Archive
 
@@ -145,11 +163,13 @@ re-run the full validation suite there.
 3. Verify the archive against the manifest:
 
    ```bash
-   python scripts/verify-release-archive.py \
+   python3 scripts/verify-release-archive.py \
      --archive template-advanced-1.0.0.zip \
      --manifest template-advanced-1.0.0.manifest.json \
      --validate
    ```
+
+   On Windows Git Bash, substitute `python3` with `py -3`.
 
 4. Optionally extract the ZIP and run `bash scripts/setup.sh`,
    `bash scripts/verify.sh`, `bash evals/run-evals.sh`, and Template Doctor in
@@ -201,7 +221,10 @@ change rules, and local validation requirements.
 ## Current Limitations
 
 - CodeGraph is an optional maintainer capability; no index is committed and
-  no tool was available to verify real indexing in this environment.
+  no tool was available to verify real indexing in this environment. Without
+  an index, Template Doctor reports `skip/info` by default and `fail/error`
+  under `--strict`; a present but corrupt or invalid database is always a
+  blocking failure.
 - External global Codex configuration (Hooks, memory, MCP servers) is outside
   this repository's control.
 - Some GitHub security features depend on repository permissions and account

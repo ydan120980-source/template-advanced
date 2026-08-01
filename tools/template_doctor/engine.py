@@ -73,19 +73,21 @@ def run_checks(
     root: Path | str,
     rules: Iterable[RuleCallable] | None = None,
     max_workers: int = MAX_WORKERS,
+    strict: bool = False,
 ) -> Report:
     """Run independent rules concurrently and return deterministically ordered results.
 
     ``max_workers`` is always clamped to the package-wide bound. When ``rules``
     is omitted, the rule registry is built lazily to keep the engine independent
-    of individual rule implementations.
+    of individual rule implementations. ``strict`` promotes optional-capability
+    findings (such as a missing CodeGraph index) to blocking failures.
     """
 
     target_root = Path(root).resolve()
     if rules is None:
         from .rules import build_rules
 
-        rules = build_rules(target_root)
+        rules = build_rules(target_root, strict=strict)
 
     rule_list = list(rules)
     if not rule_list:

@@ -46,6 +46,9 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from tools.template_doctor.policy import (  # noqa: E402
+    RELEASE_EXTRACTION_ALLOWED_FAILURES,
+)
 from tools.template_doctor.release_inventory import (  # noqa: E402
     TEXT_FILE_SUFFIXES,
     iter_release_entries,
@@ -232,7 +235,11 @@ def _find_bash() -> str:
     )
 
 
-# Per-stage bounds so validation can never wait indefinitely.
+# Per-stage bounds so validation can never wait indefinitely. subprocess.run
+# terminates the direct child on timeout; descendant processes started by a
+# stage script are not tracked on every platform, but the stages are short-lived
+# scripts that exit with their tree, so the bound still guarantees no infinite
+# wait for the validation as a whole.
 VALIDATION_TIMEOUTS = {
     "setup": 120,
     "verify": 900,
@@ -240,6 +247,18 @@ VALIDATION_TIMEOUTS = {
     "doctor": 300,
     "preflight": 120,
 }
+
+
+def _timeout_problems(label: str, timeout: int, command: list[str], exc: subprocess.TimeoutExpired) -> list[str]:
+    def tail(raw: object) -> str:
+        if not isinstance(raw, str):
+            return ""
+        return raw.strip()[-400:]
+
+    return [
+        f"{label}: timed out after {timeout}s; command: {' '.join(command)[-300:]}; "
+        f"stdout: {tail(exc.stdout)}; stderr: {tail(exc.stderr)}"
+    ]
 
 
 def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
@@ -271,8 +290,8 @@ def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
                 errors="replace",
                 timeout=timeout,
             )
-        except subprocess.TimeoutExpired:
-            problems.append(f"{label}: timed out after {timeout}s")
+        except subprocess.TimeoutExpired as exc:
+            problems.extend(_timeout_problems(label, timeout, command, exc))
             return
         if completed.returncode not in expected:
             problems.append(
@@ -284,18 +303,19 @@ def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
     run("verify", [bash, "scripts/verify.sh"], expected={0}, timeout=VALIDATION_TIMEOUTS["verify"])
     run("evals", [bash, "evals/run-evals.sh"], expected={0}, timeout=VALIDATION_TIMEOUTS["evals"])
 
+    doctor_command = [
+        *python,
+        "-B",
+        "-m",
+        "tools.template_doctor",
+        "--root",
+        ".",
+        "--format",
+        "json",
+    ]
     try:
         doctor = subprocess.run(
-            [
-                *python,
-                "-B",
-                "-m",
-                "tools.template_doctor",
-                "--root",
-                ".",
-                "--format",
-                "json",
-            ],
+            doctor_command,
             cwd=extracted,
             env=env,
             check=False,
@@ -305,8 +325,10 @@ def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
             errors="replace",
             timeout=VALIDATION_TIMEOUTS["doctor"],
         )
-    except subprocess.TimeoutExpired:
-        problems.append(f"doctor: timed out after {VALIDATION_TIMEOUTS['doctor']}s")
+    except subprocess.TimeoutExpired as exc:
+        problems.extend(
+            _timeout_problems("doctor", VALIDATION_TIMEOUTS["doctor"], doctor_command, exc)
+        )
         return problems
     if doctor.returncode not in {0, 1}:
         problems.append(f"doctor: exit {doctor.returncode} (expected 0 or 1)")
@@ -319,7 +341,7 @@ def _run_validation(extracted: Path, bash: str, python: list[str]) -> list[str]:
                 if item.get("status") == "fail"
             }
             errors = report.get("summary", {}).get("errors", 0)
-            allowed = {"git.baseline", "codegraph.initialized"}
+            allowed = RELEASE_EXTRACTION_ALLOWED_FAILURES
             if not failed.issubset(allowed) or errors:
                 problems.append(
                     f"doctor: unexpected findings failed={sorted(failed)} errors={errors}"
@@ -413,18 +435,26 @@ def main(argv: list[str] | None = None) -> int:
                 return _fail("; ".join(problems[:10]))
 
         if args.validate:
-            extract_dir = (
-                Path(args.extract_dir).resolve()
-                if args.extract_dir
-                else Path(tempfile.mkdtemp(prefix="template-advanced-release-verify-"))
-            )
-            with zipfile.ZipFile(archive_path, mode="r") as archive:
-                archive.extractall(extract_dir)
-            bash = _find_bash()
-            python = [sys.executable]
-            problems = _run_validation(extract_dir, bash, python)
-            if problems:
-                return _fail("extracted validation: " + "; ".join(problems[:10]))
+            temporary_extract = False
+            if args.extract_dir:
+                extract_dir = Path(args.extract_dir).resolve()
+                extract_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                extract_dir = Path(
+                    tempfile.mkdtemp(prefix="template-advanced-release-verify-")
+                )
+                temporary_extract = True
+            try:
+                with zipfile.ZipFile(archive_path, mode="r") as archive:
+                    archive.extractall(extract_dir)
+                bash = _find_bash()
+                python = [sys.executable]
+                problems = _run_validation(extract_dir, bash, python)
+                if problems:
+                    return _fail("extracted validation: " + "; ".join(problems[:10]))
+            finally:
+                if temporary_extract:
+                    shutil.rmtree(extract_dir, ignore_errors=True)
     except (ValueError, OSError, zipfile.BadZipFile, KeyError) as exc:
         print(f"verify-release-archive: error: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2

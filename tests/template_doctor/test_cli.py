@@ -160,6 +160,169 @@ class TemplateDoctorCliTests(unittest.TestCase):
                 result,
             )
 
+    def test_absent_codegraph_is_non_blocking_skip_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            shutil.rmtree(ready / ".codegraph")
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report["status"], "ready")
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "skip")
+        self.assertEqual(finding["severity"], "info")
+
+    def test_absent_codegraph_blocks_in_strict_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            shutil.rmtree(ready / ".codegraph")
+            completed = run_doctor(ready)
+            strict_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "tools.template_doctor",
+                    "--root",
+                    str(ready),
+                    "--format",
+                    "json",
+                    "--strict",
+                ],
+                cwd=REPO_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+
+        self.assertEqual(strict_completed.returncode, 1, strict_completed.stderr)
+        strict_report = json.loads(strict_completed.stdout)
+        self.assertEqual(strict_report["status"], "not_ready")
+        finding = next(
+            item
+            for item in strict_report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertEqual(finding["severity"], "error")
+
+    def test_corrupt_codegraph_blocks_in_default_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            (ready / ".codegraph" / "index.db").write_bytes(b"not a sqlite database")
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report["status"], "not_ready")
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertEqual(finding["severity"], "error")
+        self.assertIn(".codegraph/index.db", finding["evidence"])
+
+    def test_corrupt_codegraph_blocks_in_strict_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            (ready / ".codegraph" / "index.db").write_bytes(b"not a sqlite database")
+            strict_completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "tools.template_doctor",
+                    "--root",
+                    str(ready),
+                    "--format",
+                    "json",
+                    "--strict",
+                ],
+                cwd=REPO_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+
+        self.assertEqual(strict_completed.returncode, 1, strict_completed.stderr)
+        strict_report = json.loads(strict_completed.stdout)
+        finding = next(
+            item
+            for item in strict_report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertEqual(finding["severity"], "error")
+        self.assertIn(".codegraph/index.db", finding["evidence"])
+
+    def test_valid_codegraph_passes_with_relative_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "pass")
+        self.assertIn(".codegraph/index.db", finding["evidence"])
+        self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
+
+    def test_mixed_valid_and_corrupt_codegraph_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            codegraph_dir = ready / ".codegraph"
+            shutil.copy2(codegraph_dir / "index.db", codegraph_dir / "valid.db")
+            (codegraph_dir / "corrupt.db").write_bytes(b"not a sqlite database")
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertEqual(finding["severity"], "error")
+        self.assertIn(".codegraph/corrupt.db", finding["evidence"])
+
+    def test_codegraph_without_schema_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            database = ready / ".codegraph" / "index.db"
+            database.unlink()
+            connection = sqlite3.connect(database)
+            try:
+                connection.execute("CREATE TABLE unrelated (id INTEGER)")
+                connection.commit()
+            finally:
+                connection.close()
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertEqual(finding["severity"], "error")
+        self.assertIn("failed integrity or schema checks", finding["evidence"])
+
     def test_manual_commit_metadata_does_not_block_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             isolated_root = Path(temporary_directory) / "manual_metadata"

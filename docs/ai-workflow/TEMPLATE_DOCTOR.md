@@ -9,9 +9,12 @@ From the template root:
 ```powershell
 py -3 -B -m tools.template_doctor --root . --format json
 py -3 -B -m tools.template_doctor --root . --format markdown
+py -3 -B -m tools.template_doctor --root . --format json --strict
 ```
 
 `--root` must name an existing directory. Output is written to standard output.
+`--strict` promotes optional-capability findings (such as a missing CodeGraph
+index) to blocking failures.
 
 ## Exit Codes
 

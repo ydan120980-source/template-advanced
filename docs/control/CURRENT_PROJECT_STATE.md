@@ -44,8 +44,11 @@ Packet scope, budgets, validation, or stop conditions.
 - The project is licensed under the Apache License 2.0 (`LICENSE`, `NOTICE`).
 - The public repository has a Git baseline with `main` as the default branch;
   CI runs on Ubuntu, Windows, and macOS for Python 3.11, 3.12, and 3.13.
-- CodeGraph is an optional maintainer capability; an absent index is a
-  non-blocking finding that the CI gate explicitly allows.
+- CodeGraph is an optional maintainer capability; an absent index is reported
+  as `skip/info` by default, while `--strict` requires a valid project-local
+  index. A present but corrupt or invalid CodeGraph database is always a
+  blocking failure. CI and release validation contain no CodeGraph failure
+  allowlist.
 
 ## 4. Completed Capabilities
 
@@ -71,9 +74,12 @@ Packet scope, budgets, validation, or stop conditions.
 
 ## 6. Active Risks And Mitigations
 
-- **CodeGraph not indexed:** no tool was available in the release environment.
-  Mitigation: portable configuration and documentation; CI explicitly allows
-  the finding; no fake success marker.
+- **CodeGraph not indexed:** no CodeGraph tool was available in the release
+  environment. Portable configuration and documentation are included.
+  Template Doctor reports the absent optional capability as `skip/info` by
+  default, while `--strict` requires a valid project-local index. CI and
+  release validation contain no CodeGraph failure allowlist. A present but
+  corrupt or invalid CodeGraph database is always a blocking error.
 - **External global Codex configuration:** Hooks, memory, and MCP servers are
   outside repository control. Mitigation: capability probes report metadata
   only.
@@ -100,14 +106,18 @@ also guard bytecode writes themselves):
 ## 8. Recent Sprint Summary
 
 See `docs/control/SPRINT_LEDGER.md`. The v1.0.0 release prep established the
-license, Git baseline, CI, security workflow, and release artifacts.
+license, Git baseline, CI, security workflow, and release artifacts. The
+CodeGraph alignment sprint fixed corrupt-database detection (three-state
+semantics), unified the CI and release allowlist behind one shared policy
+constant (`RELEASE_EXTRACTION_ALLOWED_FAILURES`), and added per-stage
+validation timeouts plus temporary-extract cleanup to the archive verifier.
 
 ## 9. Current Sprint
 
-- **Task ID:** `TEMPLATE-ONBOARDING-V1` (the template onboarding packet)
+- **Task ID:** `CODEX-CLOSEOUT-2026-08-01` (CodeGraph validation and release
+  policy alignment)
 - **Mode:** Lite
-- **State:** the v1.0.0 public release is complete; no sprint is currently in
-  progress
+- **State:** validation complete; awaiting commit and User review
 
 ## 10. State Freshness
 

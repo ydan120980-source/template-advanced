@@ -348,7 +348,9 @@ elif case == "clean-template-init":
             if item["status"] == "fail"
         }
         errors = report["summary"].get("errors", 0)
-        allowed = {"git.baseline", "codegraph.initialized"}
+        from tools.template_doctor.policy import RELEASE_EXTRACTION_ALLOWED_FAILURES
+
+        allowed = RELEASE_EXTRACTION_ALLOWED_FAILURES
         if not failed.issubset(allowed) or errors:
             raise SystemExit(
                 f"evals: clean template has unexpected findings {sorted(failed)} errors={errors}"

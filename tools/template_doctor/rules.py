@@ -959,37 +959,59 @@ def _gitignore_effective(root: Path) -> CheckResult:
     )
 
 
-def _codegraph_initialized(root: Path) -> CheckResult:
+def _codegraph_initialized(root: Path, *, strict: bool = False) -> CheckResult:
     rule_id = "codegraph.initialized"
     directory = root / ".codegraph"
     databases = sorted(directory.glob("*.db")) if directory.is_dir() else []
-    verified: list[str] = []
+    expected_tables = frozenset({"nodes", "edges"})
+    verified_databases: list[str] = []
+    invalid_databases: list[str] = []
     for database in databases:
+        relative_name = database.relative_to(root).as_posix()
         if not database.is_file():
+            invalid_databases.append(f"{relative_name}: not a regular file")
             continue
         try:
             uri = f"{database.resolve().as_uri()}?mode=ro"
             with sqlite3.connect(uri, uri=True, timeout=1) as connection:
                 quick_check = connection.execute("PRAGMA quick_check").fetchone()
-                table_count = connection.execute(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"
-                ).fetchone()
-            if quick_check == ("ok",) and table_count and int(table_count[0]) > 0:
-                verified.append(database.name)
-        except (OSError, sqlite3.Error, TypeError, ValueError):
+                table_rows = connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+        except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
+            invalid_databases.append(f"{relative_name}: {type(exc).__name__}")
             continue
-    if not verified:
+        table_names = {row[0] for row in table_rows if isinstance(row, tuple)}
+        if quick_check == ("ok",) and table_names & expected_tables:
+            verified_databases.append(relative_name)
+        else:
+            invalid_databases.append(f"{relative_name}: failed integrity or schema checks")
+    if invalid_databases:
         return _result(
             rule_id,
             status="fail",
-            evidence="No valid project-local .codegraph SQLite database with schema tables was found.",
-            recommendation="When approved, run codegraph init at the real project root; do not initialize it implicitly.",
+            evidence="Invalid project-local CodeGraph database(s): " + ", ".join(invalid_databases),
+            recommendation="Repair or remove the invalid CodeGraph database, then reinitialize it with a working tool.",
+        )
+    if verified_databases:
+        return _result(
+            rule_id,
+            status="pass",
+            evidence=f"Project-local CodeGraph metadata includes readable SQLite database(s) with schema tables: {', '.join(verified_databases)}.",
+            recommendation="Check CodeGraph pending changes before relying on indexed results.",
+        )
+    if strict:
+        return _result(
+            rule_id,
+            status="fail",
+            evidence="No project-local .codegraph SQLite database with schema tables was found (strict mode).",
+            recommendation="Run codegraph init at the real project root, or drop --strict if the index is not required.",
         )
     return _result(
         rule_id,
-        status="pass",
-        evidence=f"Project-local CodeGraph metadata includes {len(verified)} readable SQLite database(s) with schema tables.",
-        recommendation="Check CodeGraph pending changes before relying on indexed results.",
+        status="skip",
+        evidence="No project-local .codegraph SQLite database was found; CodeGraph is an optional capability.",
+        recommendation="When approved, run codegraph init at the real project root; do not initialize it implicitly.",
     )
 
 
@@ -1071,8 +1093,12 @@ def _memory_capability(_: Path) -> CheckResult:
     )
 
 
-def build_rules(root: Path | str) -> list[RuleCallable]:
-    """Bind all independent, read-only rules to ``root`` in stable order."""
+def build_rules(root: Path | str, *, strict: bool = False) -> list[RuleCallable]:
+    """Bind all independent, read-only rules to ``root`` in stable order.
+
+    ``strict`` promotes optional-capability findings (such as a missing
+    CodeGraph index) to blocking failures.
+    """
 
     target = Path(root).resolve()
     definitions: tuple[tuple[str, Callable[[Path], CheckResult]], ...] = (
@@ -1080,7 +1106,7 @@ def build_rules(root: Path | str) -> list[RuleCallable]:
         ("capability.global_memory", _memory_capability),
         ("capability.hooks", _hooks_capability),
         ("capability.mcp", _mcp_capability),
-        ("codegraph.initialized", _codegraph_initialized),
+        ("codegraph.initialized", lambda path: _codegraph_initialized(path, strict=strict)),
         ("config.unsupported_profiles", _codex_config_profiles),
         ("control.current_state_freshness", _state_freshness),
         ("control.next_task_executable", _next_task_executable),

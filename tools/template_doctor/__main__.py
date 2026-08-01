@@ -37,6 +37,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="json",
         help="Report format (default: json).",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Promote optional-capability findings (such as a missing CodeGraph index) to blocking failures.",
+    )
     return parser
 
 
@@ -59,7 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         root = _validated_root(args.root)
-        report = run_checks(root)
+        report = run_checks(root, strict=args.strict)
 
         from .reporters import render_json, render_markdown
 

@@ -14,11 +14,14 @@ repository intentionally does not fabricate an initialization marker.
 
 ## Behavior Without An Index
 
-- Template Doctor reports `codegraph.initialized` as a failed rule with a
-  recommendation to initialize when approved.
-- The CI gate (`scripts/ci-doctor-gate.py`) explicitly allows exactly
-  `git.baseline` and `codegraph.initialized` as deferred external state, so an
-  absent index never blocks normal CI.
+- Template Doctor reports `codegraph.initialized` as a non-blocking `skip` by
+  default, with a recommendation to initialize when approved. A `.codegraph`
+  database that exists but is unreadable or missing schema tables still fails
+  the rule.
+- `--strict` promotes the absent index to a blocking `fail`; use it when the
+  index is a hard requirement for a release or handoff.
+- The CI gate (`scripts/ci-doctor-gate.py`) has no CodeGraph allowlist entry:
+  the default non-blocking skip means an absent index never blocks normal CI.
 - `.gitignore` excludes `.codegraph/`, so any future index database stays out
   of Git history.
 
@@ -39,8 +42,8 @@ When a maintainer has a working CodeGraph CLI or Codex CodeGraph tool:
      (`scripts/verify-release-archive.py`);
    - Template Doctor to release rules (`tools/template_doctor/rules.py`).
 4. Do not commit machine-generated cache files or absolute index paths.
-5. Rerun Template Doctor; `codegraph.initialized` must flip to pass only when
-   the index is real and readable.
+5. Rerun Template Doctor; `codegraph.initialized` must flip from `skip` to
+   `pass` only when the index is real and readable.
 
 ## Architecture Note
 

@@ -308,6 +308,98 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("usage", completed.stdout.lower())
 
+    def test_shared_policy_has_exactly_git_baseline_allowed(self) -> None:
+        from tools.template_doctor.policy import (
+            RELEASE_EXTRACTION_ALLOWED_FAILURES,
+        )
+
+        self.assertEqual(RELEASE_EXTRACTION_ALLOWED_FAILURES, frozenset({"git.baseline"}))
+        self.assertNotIn("codegraph.initialized", RELEASE_EXTRACTION_ALLOWED_FAILURES)
+
+    def test_ci_gate_uses_shared_policy(self) -> None:
+        import importlib.util
+
+        from tools.template_doctor.policy import (
+            RELEASE_EXTRACTION_ALLOWED_FAILURES,
+        )
+
+        gate_path = REPO_ROOT / "scripts" / "ci-doctor-gate.py"
+        spec = importlib.util.spec_from_file_location("ci_doctor_gate", gate_path)
+        assert spec is not None and spec.loader is not None
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        self.assertIs(gate.ALLOWED_FINDINGS, RELEASE_EXTRACTION_ALLOWED_FAILURES)
+
+    def test_extracted_validation_rejects_corrupt_codegraph_database(self) -> None:
+        if os.environ.get("AIWF_RELEASE_VALIDATION") == "1":
+            self.skipTest(
+                "skipped inside extracted-release validation to avoid recursion"
+            )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            out_dir = Path(temporary_directory) / "build"
+            out_dir.mkdir()
+            _run_python(
+                REPO_ROOT,
+                "scripts/build-release.py",
+                "--out-dir",
+                str(out_dir),
+            )
+            extract_dir = Path(temporary_directory) / "extract"
+            with zipfile.ZipFile(out_dir / f"{STEM}.zip", mode="r") as archive:
+                archive.extractall(extract_dir)
+            corrupt = extract_dir / ".codegraph" / "index.db"
+            corrupt.parent.mkdir(exist_ok=True)
+            corrupt.write_bytes(b"not a sqlite database")
+            completed = _run_python(
+                REPO_ROOT,
+                "scripts/verify-release-archive.py",
+                "--archive",
+                str(out_dir / f"{STEM}.zip"),
+                "--manifest",
+                str(out_dir / f"{STEM}.manifest.json"),
+                "--validate",
+                "--extract-dir",
+                str(extract_dir),
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 1, completed.stderr)
+        self.assertIn("unexpected findings", completed.stderr)
+        self.assertIn("codegraph.initialized", completed.stderr)
+
+    def test_validation_timeout_reports_stage_name_and_command(self) -> None:
+        import importlib.util
+        import unittest.mock
+
+        from tools.template_doctor.policy import (
+            RELEASE_EXTRACTION_ALLOWED_FAILURES,
+        )
+
+        verifier_path = REPO_ROOT / "scripts" / "verify-release-archive.py"
+        spec = importlib.util.spec_from_file_location("verify_release_archive", verifier_path)
+        assert spec is not None and spec.loader is not None
+        verifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verifier)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            extracted = Path(temporary_directory) / "extracted"
+            extracted.mkdir()
+            with unittest.mock.patch.object(
+                verifier.subprocess,
+                "run",
+                side_effect=subprocess.TimeoutExpired(
+                    ["bash", "scripts/setup.sh"], timeout=120, output="partial output"
+                ),
+            ):
+                problems = verifier._run_validation(
+                    extracted, "bash", [sys.executable]
+                )
+
+        self.assertTrue(problems)
+        self.assertIn("setup: timed out after 120s", problems[0])
+        self.assertIn("bash scripts/setup.sh", problems[0])
+        self.assertIn("partial output", problems[0])
+
     def test_clean_template_has_no_author_state_or_active_plan(self) -> None:
         for relative in (".planning", ".mode", ".nonce", ".stop_blocks"):
             self.assertFalse((REPO_ROOT / relative).exists(), relative)
