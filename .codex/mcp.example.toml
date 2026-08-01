@@ -1,0 +1,43 @@
+# Example only. MCP is not enabled by default.
+# Copy this file to a local Codex MCP config only after explicit project approval.
+
+[mcp]
+enabled = false
+
+[[mcp.servers]]
+name = "github-readonly"
+kind = "github"
+enabled = false
+default_access = "read-only"
+allowed_actions = ["read_issues", "read_pull_requests", "read_checks", "read_files"]
+forbidden_actions = ["merge", "push", "comment", "label", "change_settings", "deploy", "read_secrets"]
+
+[[mcp.servers]]
+name = "figma-readonly"
+kind = "figma"
+enabled = false
+default_access = "read-only"
+allowed_actions = ["read_files", "read_nodes", "export_assets"]
+forbidden_actions = ["write_files", "publish_changes", "read_secrets"]
+
+[[mcp.servers]]
+name = "browser-readonly"
+kind = "browser"
+enabled = false
+default_access = "read-only"
+allowed_actions = ["open_pages", "inspect_pages", "read_documentation"]
+forbidden_actions = ["submit_forms", "change_accounts", "purchase", "deploy", "read_secrets"]
+
+[[mcp.servers]]
+name = "logs-readonly"
+kind = "logs"
+enabled = false
+default_access = "read-only"
+allowed_actions = ["read_redacted_logs"]
+forbidden_actions = ["read_raw_pii", "read_secrets", "write_logs", "delete_logs"]
+
+[mcp.production]
+writes_allowed = false
+deployments_allowed = false
+secrets_allowed = false
+requires_explicit_task_authorization = true

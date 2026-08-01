@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Setup
+        run: bash scripts/setup.sh
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Verify
+        run: bash scripts/verify.sh
+      - name: Evals
+        run: bash evals/run-evals.sh
+      - name: Doctor gate
+        run: python -B scripts/ci-doctor-gate.py --root .

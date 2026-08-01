@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement for template-advanced.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Keep the request focused and
+        evidence-friendly.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or inconvenient today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should change, and where?
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and scope
+      description: Which workflows, files, or contracts would be affected?

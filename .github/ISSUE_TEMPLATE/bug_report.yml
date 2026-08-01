@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible problem with template-advanced.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Do not include secrets,
+        private paths, or personal data in this report.
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Windows, macOS, or Linux (include the version if known).
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version` (or `py -3 --version`).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Project version
+      description: Release tag (for example v1.0.0) or commit hash.
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands run
+      description: The exact commands that triggered the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output
+      description: Paste the actual output or error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: verify
+    attributes:
+      label: Did you run the full verification?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+  - type: dropdown
+    id: control
+    attributes:
+      label: Did you modify template control files?
+      options:
+        - "No"
+        - "Yes (docs/control/*, AGENTS.md, or scripts)"
+    validations:
+      required: true

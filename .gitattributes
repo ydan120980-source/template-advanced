@@ -1,0 +1,21 @@
+# Repository text is normalized to LF so release bytes are identical on every
+# checkout platform. The explicitly listed Windows PowerShell script keeps
+# CRLF endings.
+* text eol=lf
+
+*.md text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ps1 text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

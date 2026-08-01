@@ -1,0 +1,133 @@
+name: release-artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Tag and project version agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          expected="v$(python -B -c 'import sys; sys.path.insert(0, "."); from tools.template_doctor.release_inventory import RELEASE_VERSION; print(RELEASE_VERSION)')"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match project version ${expected}" >&2
+            exit 1
+          fi
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+      - name: Verify
+        run: bash scripts/verify.sh
+      - name: Evals
+        run: bash evals/run-evals.sh
+      - name: Build release (first)
+        run: python scripts/build-release.py --out-dir dist-build-1
+      - name: Build release (second)
+        run: python scripts/build-release.py --out-dir dist-build-2
+      - name: Compare builds
+        run: |
+          set -euo pipefail
+          for f in template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt; do
+            cmp "dist-build-1/$f" "dist-build-2/$f" || { echo "$f differs between builds" >&2; exit 1; }
+          done
+          echo "determinism: all three artifacts are byte-identical"
+      - name: Promote canonical build
+        run: |
+          mkdir -p dist
+          cp dist-build-1/* dist/
+      - name: Verify archive with clean extraction
+        run: python scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json --validate
+      - name: Generate SHA256SUMS
+        run: |
+          cd dist
+          sha256sum template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-assets
+          path: |
+            dist/template-advanced-1.0.0.zip
+            dist/template-advanced-1.0.0.manifest.json
+            dist/template-advanced-1.0.0.digest.txt
+            dist/SHA256SUMS
+          if-no-files-found: error
+      - name: Attach assets to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd dist
+          zip_sha=$(sha256sum template-advanced-1.0.0.zip | cut -d' ' -f1)
+          manifest_sha=$(sha256sum template-advanced-1.0.0.manifest.json | cut -d' ' -f1)
+          digest_sha=$(sha256sum template-advanced-1.0.0.digest.txt | cut -d' ' -f1)
+          digest_value=$(cat template-advanced-1.0.0.digest.txt)
+          notes=$(cat <<EOF
+          # template-advanced ${GITHUB_REF_NAME}
+
+          Deterministic, evidence-driven engineering template for AI coding agents and Codex workflows.
+
+          ## Highlights
+
+          - Deterministic release builds (fixed timestamps, explicit modes, stable sorting)
+          - Cross-platform validation on Ubuntu, Windows, and macOS
+          - AIWF Run Guard evidence lifecycle
+          - Template Doctor readiness and drift detection
+          - Clean release archive validation in an extracted directory
+          - Evidence-driven control documents
+
+          ## Validation
+
+          CI matrix: Ubuntu, Windows, macOS x Python 3.11, 3.12, 3.13. Unit tests, verify, evals, and the Doctor CI gate pass for the release tag.
+
+          ## Artifacts
+
+          - ZIP: deterministic release archive
+          - Manifest: path, size, SHA-256, mode, and publication digest per file
+          - Digest: publication digest
+          - SHA256SUMS: checksums of the three files above
+
+          ## Verification
+
+          ZIP SHA-256: ${zip_sha}
+          Manifest SHA-256: ${manifest_sha}
+          Digest file SHA-256: ${digest_sha}
+          Publication digest: ${digest_value}
+
+          Verify locally with:
+
+          sha256sum -c SHA256SUMS
+          python scripts/verify-release-archive.py --archive template-advanced-1.0.0.zip --manifest template-advanced-1.0.0.manifest.json --validate
+
+          ## Known limitations
+
+          - CodeGraph is an optional maintainer capability; no index is committed.
+          - External global Codex configuration is outside project control.
+          - Some GitHub security features depend on repository permissions.
+
+          ## License
+
+          Apache License 2.0
+          EOF
+          )
+          gh release create "$GITHUB_REF_NAME" \
+            template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt SHA256SUMS \
+            --title "template-advanced ${GITHUB_REF_NAME}" \
+            --notes "$notes" \
+            || gh release upload "$GITHUB_REF_NAME" \
+              template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt SHA256SUMS \
+              --clobber

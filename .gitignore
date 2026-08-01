@@ -1,0 +1,85 @@
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Local environment, credentials, and private material
+.env
+.env.*
+!.env.example
+.secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+# Python caches, environments, and test output
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+
+# JavaScript and general build output
+node_modules/
+dist/
+build/
+out/
+coverage/
+.next/
+.nuxt/
+.vite/
+.cache/
+tmp/
+temp/
+
+# Logs and runtime output
+*.log
+logs/
+*.pid
+*.pid.lock
+
+# Codex host-local runtime state (project configuration remains tracked)
+.codex/session*
+.codex/tmp*
+.codex/cache*
+.codex/logs/
+
+# planning-with-files journals and local execution evidence
+.planning/
+/task_plan.md
+/findings.md
+/progress.md
+/.mode
+/.nonce
+/.stop_blocks
+
+# Project-local CodeGraph index data (optional capability, never committed)
+.codegraph/
+
+# Test, browser, evaluation, and local tool artifacts
+test-results/
+playwright-report/
+screenshots/
+videos/
+evals/tmp/
+evals/results/
+evals/artifacts/
+.github/codex/tmp/
+.github/codex/logs/
+.tool-cache/
+.local-tools/

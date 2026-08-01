@@ -1,0 +1,264 @@
+# 高效率低成本运行指南
+
+这份指南用于把 AI Coding Workflow 从“完整方法论”压缩成日常可执行的低成本操作流。
+
+目标：默认轻量、必要升级、每轮有证据、不让流程本身吞掉效率。
+
+## 1. 默认运行策略
+
+建议把日常任务按这个比例管理：
+
+| 占比 | Workflow Mode | 使用场景 | 核心要求 |
+| --- | --- | --- | --- |
+| 80% | Lite | 小修、文档统一、命名修正、局部测试修复、轻量 closeout | 短任务包 + focused validation + compact Evidence Ledger |
+| 15% | Standard | 多文件一致性、已有模式复用、局部 hardening、中等功能切片 | Scorecard + 明确 Allowed Paths + full Evidence Ledger |
+| 5% | Full | 新主轴、新 contract / public entrypoint、边界敏感变更、状态迁移 | 完整 control-state loop + reviewer / Meta Reviewer 判断 |
+
+判断原则：优先选择能安全完成任务的最轻模式。不要因为模板存在，就每轮都跑完整流程。
+
+## 2. 固定入口
+
+真实项目里建议固定使用一个执行入口：
+
+```text
+docs/control/NEXT_CODEX_TASK.md
+```
+
+Web GPT 每轮只负责更新这个任务包。Codex 每轮只执行这个任务包。这样可以避免上下文散落在聊天记录里。
+
+最小文件组合：
+
+```text
+docs/control/
+  CURRENT_PROJECT_STATE.md
+  NEXT_CODEX_TASK.md
+  SPRINT_LEDGER.md
+```
+
+推荐完整组合：
+
+```text
+docs/control/
+  CURRENT_PROJECT_STATE.md
+  SPRINT_LEDGER.md
+  CHATGPT_HANDOFF.md
+  NEXT_CODEX_TASK.md
+  CODEX_RUNTIME_PROFILE.md
+```
+
+## 3. Web GPT 总控提示词
+
+每轮开始时，把下面这段给 Web GPT：
+
+```text
+你是本项目的 Web GPT / cloud controller。
+
+请读取：
+- docs/control/CURRENT_PROJECT_STATE.md
+- docs/control/SPRINT_LEDGER.md 中最近一轮结果
+- 必要时读取 docs/control/CHATGPT_HANDOFF.md
+
+你的任务：
+1. 判断当前最高价值的 bounded sprint。
+2. 选择 Workflow Mode：Lite / Standard / Full，优先选择能安全完成任务的最轻模式。
+3. 如果 Outcome Impact + Project Value < 7，不要生成实现任务，改为 closeout / context fill / switch axis。
+4. 如果 Verification Confidence <= 2，生成 preflight / read-only probe，不要生成实现任务。
+5. 如果 Boundary Risk >= 4，缩小范围或升级为 Full + reviewer。
+6. 生成一份可直接写入 docs/control/NEXT_CODEX_TASK.md 的任务包。
+
+任务包必须包含：
+- Goal
+- Why This Sprint
+- Workflow Mode
+- Required Reading
+- Allowed Paths
+- Forbidden Paths
+- Budget
+- Validation Commands
+- Stop Conditions
+- Required Return Format
+```
+
+## 4. Codex 执行提示词
+
+每轮交给 Codex 时使用：
+
+```text
+Read AGENTS.md and docs/control/NEXT_CODEX_TASK.md.
+
+Execute only the task packet.
+Respect Workflow Mode, Allowed Paths, Forbidden Paths, Budget, and Stop Conditions.
+
+For Lite:
+- read only required task files;
+- make the smallest coherent change;
+- run focused validation;
+- return compact Evidence Ledger;
+- do not update state files unless explicitly asked.
+
+For Standard / Full:
+- read the control-state files explicitly listed in the task packet;
+- run the requested validation;
+- return full Evidence Ledger;
+- propose state updates only when needed.
+
+If the task needs broader scope, extra files, dependency changes, architecture decisions, or more validation than declared, stop and report escalation instead of silently expanding.
+```
+
+## 5. Lite 任务包最小模板
+
+日常小任务优先用这个模板，不要复制完整大模板：
+
+```text
+# NEXT_CODEX_TASK.md
+
+Task ID:
+Task Size: Small
+Workflow Mode: Lite
+
+## Goal
+<one sentence>
+
+## Why This Sprint
+<why this is the highest-value small step>
+
+## Required Reading
+- AGENTS.md
+- <specific file>
+
+## Allowed Paths
+- <path>
+
+## Forbidden Paths
+- everything outside Allowed Paths
+
+## Budget
+- Maximum files changed: 1-3
+- Maximum commands run: 1-3
+- Maximum retries: 1
+
+## Validation Commands
+- <focused command or static check>
+
+## Stop Conditions
+- required file missing
+- task needs files outside Allowed Paths
+- validation cannot run
+- diff exceeds Lite budget
+- shared contract / public interface change is required
+
+## Required Return Format
+Evidence Ledger
+- Goal:
+- Files changed:
+- Commands run:
+- Validation result:
+- Scope check:
+- Follow-up:
+```
+
+## 6. Standard 任务包最小模板
+
+中等任务使用：
+
+```text
+# NEXT_CODEX_TASK.md
+
+Task ID:
+Task Size: Medium
+Workflow Mode: Standard
+
+## Goal
+<one bounded sprint>
+
+## Scorecard Summary
+- Outcome Impact:
+- Project Value:
+- Verification Confidence:
+- Boundary Risk:
+- Reversibility:
+- Context Completeness:
+- Reviewer Worthiness:
+- Decision:
+
+## Required Reading
+- AGENTS.md
+- docs/control/CURRENT_PROJECT_STATE.md
+- docs/control/CODEX_RUNTIME_PROFILE.md
+- <task-specific files>
+
+## Allowed Paths
+- <paths>
+
+## Forbidden Paths
+- <paths / surfaces>
+
+## Budget
+- Maximum files changed:
+- Maximum commands run:
+- Maximum retries:
+
+## Validation Commands
+- Focused:
+- Adjacent:
+
+## Stop Conditions
+- scope crosses declared boundary
+- public interface / frozen contract change is needed
+- validation setup contradicts task assumptions
+- reviewer becomes necessary
+
+## Required Return Format
+Full Evidence Ledger with files changed, commands run, validation result, risks, follow-up, and state update recommendation.
+```
+
+## 7. 升级规则
+
+| 发现的问题 | 不要做什么 | 应该做什么 |
+| --- | --- | --- |
+| Lite 需要改 Allowed Paths 外文件 | 静默扩大 diff | 停止，升级 Standard |
+| 缺关键上下文 | 猜测实现 | context fill |
+| 验证命令跑不了 | 声称理论可行 | 记录 Verification Failure |
+| 触碰 public interface / frozen contract | 顺手改接口 | Full + reviewer |
+| Outcome Impact + Project Value < 7 | 开实现 sprint | closeout / switch axis |
+| 同一主轴收益变低 | 继续深挖 | Context Compression + NEXT_AXIS |
+
+## 8. Evidence Ledger 压缩策略
+
+Lite 只写 compact ledger：
+
+```text
+Evidence Ledger
+- Goal:
+- Files changed:
+- Commands run:
+- Validation result:
+- Scope check:
+- Follow-up:
+```
+
+Standard / Full 再写完整 ledger。完整模板见 `EVIDENCE_LEDGER_TEMPLATE.md`。
+
+原则：Evidence Ledger 必须足够让下一轮接手，但不能把小任务变成文书工作。
+
+## 9. 每周维护动作
+
+如果项目连续运行多轮，建议每周或每 5-8 个 sprint 做一次维护：
+
+1. 清理 `SPRINT_LEDGER.md`：保留事实，不补写空话。
+2. 把稳定结论压缩进 `CURRENT_PROJECT_STATE.md`。
+3. 标记已封板区域为 `BUGFIX_ONLY`。
+4. 删除或归档过期的 `NEXT_CODEX_TASK.md` 内容。
+5. 检查默认验证命令是否仍然有效。
+6. 判断当前主轴是否应该 closeout 或 switch axis。
+
+## 10. 成本控制硬规则
+
+- 不为小任务打开 Full。
+- 不把 Web GPT 用作长时间实现器。
+- 不让 Codex 在任务包外自由探索。
+- 不让 helper 模型做最终验收。
+- 不接受没有验证命令或明确原因的完成声明。
+- 不把所有 sprint 结果都塞进 `CURRENT_PROJECT_STATE.md`。
+
+最有效的实践是：Web GPT 只更新 `NEXT_CODEX_TASK.md`，Codex 只执行 `NEXT_CODEX_TASK.md`，Evidence Ledger 只记录本轮事实。

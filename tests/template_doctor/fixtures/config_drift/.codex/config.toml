@@ -1,0 +1,4 @@
+model = "gpt-5"
+
+[profiles.full]
+model_reasoning_effort = "high"
