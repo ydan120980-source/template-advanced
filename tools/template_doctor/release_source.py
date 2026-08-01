@@ -72,6 +72,15 @@ def _is_regular_blob(mode: str) -> bool:
 
 
 def _tracked_modes(root: Path, relative_paths: list[str]) -> dict[str, int]:
+    """Return the Git index mode for every path.
+
+    Only the executable bit from the index is used; everything else
+    (read/write bits, file type) is intentionally ignored. Git work trees on
+    Windows commonly store ``100644`` for shell scripts that must run with
+    ``0755`` intent, so the trusted builder combines the index mode with the
+    same naming contract the inventory uses (``*.sh`` is intended executable).
+    """
+
     if not relative_paths:
         return {}
     completed = _run_git(root, "ls-files", "--stage", "--", *relative_paths)
@@ -91,6 +100,13 @@ def _tracked_modes(root: Path, relative_paths: list[str]) -> dict[str, int]:
             mode = int(mode_text, 8)
         except ValueError:
             continue
+        if path.endswith(".sh") or mode & 0o111:
+            # Executable intent: either Git explicitly recorded the
+            # executable bit, or the file is a shell script covered by the
+            # release contract's executable naming rule.
+            mode = 0o100755
+        else:
+            mode = 0o100644
         modes[path] = mode
     return modes
 
