@@ -45,10 +45,13 @@ Packet scope, budgets, validation, or stop conditions.
 - The public repository has a Git baseline with `main` as the default branch;
   CI runs on Ubuntu, Windows, and macOS for Python 3.11, 3.12, and 3.13.
 - CodeGraph is an optional maintainer capability; an absent index is reported
-  as `skip/info` by default, while `--strict` requires a valid project-local
-  index. A present but corrupt or invalid CodeGraph database is always a
-  blocking failure. CI and release validation contain no CodeGraph failure
-  allowlist.
+  as `skip/info` by default, while `--strict` requires a project-local index.
+  The Doctor's check is a conservative heuristic: a database must be readable
+  by SQLite, pass `PRAGMA quick_check`, and contain at least one currently
+  recognized candidate table (such as `nodes` or `edges`); it does not prove
+  compatibility with a complete or official CodeGraph schema. A present but
+  corrupt or invalid CodeGraph database is always a blocking failure. CI and
+  release validation contain no CodeGraph failure allowlist.
 
 ## 4. Completed Capabilities
 
@@ -77,9 +80,12 @@ Packet scope, budgets, validation, or stop conditions.
 - **CodeGraph not indexed:** no CodeGraph tool was available in the release
   environment. Portable configuration and documentation are included.
   Template Doctor reports the absent optional capability as `skip/info` by
-  default, while `--strict` requires a valid project-local index. CI and
-  release validation contain no CodeGraph failure allowlist. A present but
-  corrupt or invalid CodeGraph database is always a blocking error.
+  default, while `--strict` requires a project-local index. The Doctor's
+  check is a conservative heuristic (readable SQLite, passing `quick_check`,
+  at least one recognized candidate table such as `nodes` or `edges`); it
+  does not prove compatibility with a complete or official CodeGraph schema.
+  CI and release validation contain no CodeGraph failure allowlist. A present
+  but corrupt or invalid CodeGraph database is always a blocking error.
 - **External global Codex configuration:** Hooks, memory, and MCP servers are
   outside repository control. Mitigation: capability probes report metadata
   only.
@@ -111,11 +117,15 @@ CodeGraph alignment sprint fixed corrupt-database detection (three-state
 semantics), unified the CI and release allowlist behind one shared policy
 constant (`RELEASE_EXTRACTION_ALLOWED_FAILURES`), and added per-stage
 validation timeouts plus temporary-extract cleanup to the archive verifier.
+A follow-up sprint named the check a conservative heuristic: databases with
+`nodes`-only, `edges`-only, or combined candidate tables pass when
+`quick_check` succeeds, while databases with no recognized candidate table
+remain blocking, and no complete-schema guarantee is claimed.
 
 ## 9. Current Sprint
 
-- **Task ID:** `CODEX-CLOSEOUT-2026-08-01` (CodeGraph validation and release
-  policy alignment)
+- **Task ID:** `CODEX-CODEGRAPH-HEURISTIC-2026-08-01` (CodeGraph candidate
+  database heuristic contract)
 - **Mode:** Lite
 - **State:** validation complete; awaiting commit and User review
 

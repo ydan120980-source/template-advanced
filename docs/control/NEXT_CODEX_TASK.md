@@ -55,7 +55,10 @@ py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.z
 
 Template Doctor exits `1` for the deferred Git baseline only; a missing
 CodeGraph index is an optional capability reported as a non-blocking `skip`,
-and any other content failure must be fixed before declaring readiness.
+and any other content failure must be fixed before declaring readiness. The
+Doctor's CodeGraph check is a conservative heuristic (readable SQLite,
+passing `quick_check`, at least one recognized candidate table such as
+`nodes` or `edges`) and is not a complete schema-compatibility guarantee.
 
 ## Stop Conditions
 

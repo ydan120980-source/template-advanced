@@ -963,7 +963,11 @@ def _codegraph_initialized(root: Path, *, strict: bool = False) -> CheckResult:
     rule_id = "codegraph.initialized"
     directory = root / ".codegraph"
     databases = sorted(directory.glob("*.db")) if directory.is_dir() else []
-    expected_tables = frozenset({"nodes", "edges"})
+    # Heuristic candidate detection: there is no authoritative schema contract
+    # for CodeGraph databases, so any readable SQLite database passing
+    # quick_check with at least one currently recognized candidate table is
+    # accepted. This is a health check, not full schema validation.
+    recognized_candidate_tables = frozenset({"nodes", "edges"})
     verified_databases: list[str] = []
     invalid_databases: list[str] = []
     for database in databases:
@@ -982,10 +986,22 @@ def _codegraph_initialized(root: Path, *, strict: bool = False) -> CheckResult:
             invalid_databases.append(f"{relative_name}: {type(exc).__name__}")
             continue
         table_names = {row[0] for row in table_rows if isinstance(row, tuple)}
-        if quick_check == ("ok",) and table_names & expected_tables:
-            verified_databases.append(relative_name)
+        recognized_tables_present = table_names & recognized_candidate_tables
+        database_is_healthy_candidate = (
+            quick_check == ("ok",) and bool(recognized_tables_present)
+        )
+        if database_is_healthy_candidate:
+            recognized = sorted(recognized_tables_present)
+            verified_databases.append(
+                f"{relative_name} contains recognized candidate table(s): "
+                + ", ".join(recognized)
+            )
+        elif quick_check == ("ok",):
+            invalid_databases.append(
+                f"{relative_name}: no recognized CodeGraph candidate tables"
+            )
         else:
-            invalid_databases.append(f"{relative_name}: failed integrity or schema checks")
+            invalid_databases.append(f"{relative_name}: failed SQLite quick_check")
     if invalid_databases:
         return _result(
             rule_id,
@@ -997,20 +1013,20 @@ def _codegraph_initialized(root: Path, *, strict: bool = False) -> CheckResult:
         return _result(
             rule_id,
             status="pass",
-            evidence=f"Project-local CodeGraph metadata includes readable SQLite database(s) with schema tables: {', '.join(verified_databases)}.",
+            evidence="Project-local CodeGraph candidate database(s) passed SQLite quick_check: " + "; ".join(verified_databases),
             recommendation="Check CodeGraph pending changes before relying on indexed results.",
         )
     if strict:
         return _result(
             rule_id,
             status="fail",
-            evidence="No project-local .codegraph SQLite database with schema tables was found (strict mode).",
+            evidence="No project-local .codegraph candidate SQLite database was found (strict mode).",
             recommendation="Run codegraph init at the real project root, or drop --strict if the index is not required.",
         )
     return _result(
         rule_id,
         status="skip",
-        evidence="No project-local .codegraph SQLite database was found; CodeGraph is an optional capability.",
+        evidence="No project-local .codegraph candidate SQLite database was found; CodeGraph is an optional capability.",
         recommendation="When approved, run codegraph init at the real project root; do not initialize it implicitly.",
     )
 

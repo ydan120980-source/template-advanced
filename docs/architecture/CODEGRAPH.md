@@ -15,9 +15,13 @@ repository intentionally does not fabricate an initialization marker.
 ## Behavior Without An Index
 
 - Template Doctor reports `codegraph.initialized` as a non-blocking `skip` by
-  default, with a recommendation to initialize when approved. A `.codegraph`
-  database that exists but is unreadable or missing schema tables still fails
-  the rule.
+  default, with a recommendation to initialize when approved. The Doctor's
+  check is a conservative heuristic: a `.codegraph` database must be readable
+  by SQLite, pass `PRAGMA quick_check`, and contain at least one currently
+  recognized candidate table (such as `nodes` or `edges`). A database that is
+  unreadable, fails the integrity check, or contains no recognized candidate
+  table still fails the rule. This check does not prove compatibility with a
+  complete or official CodeGraph schema.
 - `--strict` promotes the absent index to a blocking `fail`; use it when the
   index is a hard requirement for a release or handoff.
 - The CI gate (`scripts/ci-doctor-gate.py`) has no CodeGraph allowlist entry:

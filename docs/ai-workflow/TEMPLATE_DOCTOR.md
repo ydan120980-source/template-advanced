@@ -70,7 +70,11 @@ The Doctor deliberately does not initialize Git, create `.gitignore`, initialize
 
 - Git readiness is verified by resolving `HEAD^{commit}` with the installed Git executable.
 - `.gitignore` behavior is checked against a deterministic representative-path matcher; it is not a complete replacement for `git check-ignore`.
-- CodeGraph readiness verifies a healthy, read-only SQLite database with schema tables. It does not bind the Doctor to a private CodeGraph schema version.
+- CodeGraph readiness performs a conservative heuristic check: a project-local
+  `.codegraph/*.db` must be readable by SQLite, pass `PRAGMA quick_check`, and
+  contain at least one currently recognized candidate table such as `nodes` or
+  `edges`. This is a health check, not proof of compatibility with a complete
+  or official CodeGraph schema.
 - An example MCP file is reported as skipped, not as a configured capability.
 
 ## Tests

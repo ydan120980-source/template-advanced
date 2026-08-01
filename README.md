@@ -94,7 +94,11 @@ Doctor drift detection, and clean-template initialization.
 Template Doctor exits `1` only for a missing Git baseline (explicitly deferred
 external state); the CI gate allows exactly that finding and blocks on anything
 else. A missing CodeGraph index is an optional capability reported as a
-non-blocking `skip`; pass `--strict` to treat it as a blocking failure.
+non-blocking `skip`; pass `--strict` to treat it as a blocking failure. The
+Doctor's CodeGraph check is a conservative heuristic — a readable SQLite
+database that passes `quick_check` and contains at least one recognized
+candidate table such as `nodes` or `edges` — not a complete
+schema-compatibility guarantee.
 
 ## Template Doctor
 
@@ -224,7 +228,8 @@ change rules, and local validation requirements.
   no tool was available to verify real indexing in this environment. Without
   an index, Template Doctor reports `skip/info` by default and `fail/error`
   under `--strict`; a present but corrupt or invalid database is always a
-  blocking failure.
+  blocking failure. The Doctor's check is a heuristic and does not prove
+  compatibility with a complete or official CodeGraph schema.
 - External global Codex configuration (Hooks, memory, MCP servers) is outside
   this repository's control.
 - Some GitHub security features depend on repository permissions and account

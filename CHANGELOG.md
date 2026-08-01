@@ -10,14 +10,22 @@ release tags exist.
 
 - CodeGraph detection now has three explicit states: absent index reports
   `skip/info` by default and `fail/error` under `--strict`; a present but
-  corrupt or invalid database always reports `fail/error`; a valid database
-  reports `pass` with relative-path evidence.
+  corrupt or invalid database always reports `fail/error`; a valid candidate
+  database reports `pass` with relative-path evidence. The recognition check
+  is explicitly a heuristic: a database passes when SQLite `quick_check`
+  succeeds and it contains at least one currently recognized candidate table
+  such as `nodes` or `edges`; the check does not claim compatibility with a
+  complete or official CodeGraph schema.
 - CI and release-archive validation share one allowlist
   (`RELEASE_EXTRACTION_ALLOWED_FAILURES`, only `git.baseline`); CodeGraph has
   no failure allowlist anywhere.
 - Archive `--validate` reports stage, command, timeout, and output summaries
   on timeout, and always removes its temporary extraction directory.
 - GitHub Actions pinned to full commit SHAs with version comments.
+- The CodeGraph recognition check is explicitly a heuristic: `nodes`-only,
+  `edges`-only, and combined databases pass when `quick_check` succeeds,
+  while databases with no recognized candidate table remain blocking. No
+  complete-schema guarantee is claimed.
 
 ## [1.0.0] - 2026-08-01
 

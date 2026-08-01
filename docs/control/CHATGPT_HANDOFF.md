@@ -24,7 +24,11 @@ Based On State Version: v2.0
 - CodeGraph is optional; `docs/architecture/CODEGRAPH.md` documents the
   portable configuration and honest verification status. Template Doctor
   reports an absent index as `skip/info` by default and `fail/error` under
-  `--strict`; a corrupt or invalid project-local database is always a
+  `--strict`. The Doctor's check is a conservative heuristic: a project-local
+  database must be readable by SQLite, pass `quick_check`, and contain at
+  least one currently recognized candidate table (such as `nodes` or
+  `edges`); it does not prove compatibility with a complete or official
+  CodeGraph schema. A corrupt or invalid project-local database is always a
   blocking failure, and no CI or release allowlist covers it.
 
 ## Boundaries

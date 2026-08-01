@@ -229,6 +229,8 @@ class TemplateDoctorCliTests(unittest.TestCase):
         self.assertEqual(finding["status"], "fail")
         self.assertEqual(finding["severity"], "error")
         self.assertIn(".codegraph/index.db", finding["evidence"])
+        self.assertIn("DatabaseError", finding["evidence"])
+        self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
 
     def test_corrupt_codegraph_blocks_in_strict_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -263,6 +265,7 @@ class TemplateDoctorCliTests(unittest.TestCase):
         self.assertEqual(finding["status"], "fail")
         self.assertEqual(finding["severity"], "error")
         self.assertIn(".codegraph/index.db", finding["evidence"])
+        self.assertIn("DatabaseError", finding["evidence"])
 
     def test_valid_codegraph_passes_with_relative_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -278,6 +281,8 @@ class TemplateDoctorCliTests(unittest.TestCase):
         )
         self.assertEqual(finding["status"], "pass")
         self.assertIn(".codegraph/index.db", finding["evidence"])
+        self.assertIn("recognized candidate table(s)", finding["evidence"])
+        self.assertIn("nodes", finding["evidence"])
         self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
 
     def test_mixed_valid_and_corrupt_codegraph_blocks(self) -> None:
@@ -298,6 +303,8 @@ class TemplateDoctorCliTests(unittest.TestCase):
         self.assertEqual(finding["status"], "fail")
         self.assertEqual(finding["severity"], "error")
         self.assertIn(".codegraph/corrupt.db", finding["evidence"])
+        self.assertIn("DatabaseError", finding["evidence"])
+        self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
 
     def test_codegraph_without_schema_blocks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -321,7 +328,88 @@ class TemplateDoctorCliTests(unittest.TestCase):
         )
         self.assertEqual(finding["status"], "fail")
         self.assertEqual(finding["severity"], "error")
-        self.assertIn("failed integrity or schema checks", finding["evidence"])
+        self.assertIn("no recognized CodeGraph candidate tables", finding["evidence"])
+        self.assertIn(".codegraph/index.db", finding["evidence"])
+        self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
+
+    def test_nodes_only_codegraph_database_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            database = ready / ".codegraph" / "index.db"
+            database.unlink()
+            connection = sqlite3.connect(database)
+            try:
+                connection.execute(
+                    "CREATE TABLE nodes (id TEXT PRIMARY KEY)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report["status"], "ready")
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "pass")
+        self.assertEqual(finding["severity"], "info")
+        self.assertIn("recognized candidate table(s)", finding["evidence"])
+        self.assertIn("nodes", finding["evidence"])
+        self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
+
+    def test_edges_only_codegraph_database_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            database = ready / ".codegraph" / "index.db"
+            database.unlink()
+            connection = sqlite3.connect(database)
+            try:
+                connection.execute(
+                    "CREATE TABLE edges (source TEXT, target TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report["status"], "ready")
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "pass")
+        self.assertEqual(finding["severity"], "info")
+        self.assertIn("recognized candidate table(s)", finding["evidence"])
+        self.assertIn("edges", finding["evidence"])
+        self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
+
+    def test_empty_sqlite_codegraph_database_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
+            database = ready / ".codegraph" / "index.db"
+            database.unlink()
+            connection = sqlite3.connect(database)
+            connection.close()
+            completed = run_doctor(ready)
+
+        self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["results"]
+            if item["rule_id"] == "codegraph.initialized"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertEqual(finding["severity"], "error")
+        self.assertIn("no recognized CodeGraph candidate tables", finding["evidence"])
+        self.assertNotIn(str(ready).replace("\\", "/"), finding["evidence"])
 
     def test_manual_commit_metadata_does_not_block_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
