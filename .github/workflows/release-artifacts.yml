@@ -91,6 +91,18 @@ jobs:
           - Git source archive guidance distinct from deterministic Release ZIPs
           - Evidence-driven control documents
 
+          ## Breaking or behavior changes
+
+          - Formal release builds require a clean Git worktree and read release
+            files from the tagged `HEAD` commit.
+          - Release files that differ from `HEAD` block the build; non-Git
+            builds require explicit `--allow-unverified` and are labeled as
+            unverified source-tree builds.
+          - A Git source ZIP is a traceable convenience archive, but its ZIP
+            bytes are not promised to be identical across Git, zlib, and
+            operating-system implementations. The custom Release ZIP is the
+            cross-platform byte-deterministic artifact.
+
           ## Validation
 
           CI matrix: Ubuntu, Windows, macOS x Python 3.11, 3.12, 3.13. Unit tests, verify, evals, and the Doctor CI gate pass for the release tag.
@@ -120,6 +132,16 @@ jobs:
           - Source ZIP byte representation may vary across Git, zlib, and operating systems.
           - External global Codex configuration is outside project control.
           - Some GitHub security features depend on repository permissions.
+
+          ## Upgrade
+
+          - Review the project-level `.codex/config.toml` safe defaults when
+            upgrading from `v1.0.0`.
+          - Build formal releases from a clean Git commit; do not compress the
+            mutable working directory.
+          - If an automation flow intentionally builds outside Git, pass
+            `--allow-unverified` explicitly and treat the output as
+            unverified.
 
           ## License
 

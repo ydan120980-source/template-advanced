@@ -3,7 +3,7 @@
 Task ID: `RELEASE-V1.1.0`
 Task Size: Large
 Workflow Mode: Full
-Status: implementation pending
+Status: implementation and local validation complete; publication pending
 
 This is a bounded public-release sprint. It promotes the verified current
 `main` line to `v1.1.0` without moving or replacing the historical `v1.0.0`
@@ -133,7 +133,9 @@ bootstrap evidence in the ledger.
    `--validate`, CodeGraph rejection, or CI/security contracts.
 6. Append the accepted release sprint evidence to the control ledger and leave
    current state/handoff aligned with the final published commit and remote
-   verification.
+   verification. The current checkpoint has passed implementation review and
+   local validation; publication remains blocked until the required remote
+   checks and tag workflow succeed.
 
 ## Validation Commands
 

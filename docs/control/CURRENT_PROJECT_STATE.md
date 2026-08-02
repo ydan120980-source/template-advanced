@@ -7,7 +7,8 @@ Is state stale?: no
 ## 1. Current Project Phase
 
 - **Current Phase:** RELEASE-CANDIDATE
-- **Phase Status:** v1.0.0 remains published; v1.1.0 release sprint is in progress
+- **Phase Status:** v1.0.0 remains published; v1.1.0 implementation and local
+  validation are complete, with remote publication pending
 - **Phase Goal:** provide a portable, verifiable, publishable starting point
   for a new Codex-governed project
 
@@ -160,8 +161,8 @@ artifacts retain their cross-platform byte-determinism contract.
 
 - **Task ID:** `RELEASE-V1.1.0`
 - **Mode:** Full
-- **State:** implementation in progress; publication is gated on local and
-  remote validation
+- **State:** implementation review and local validation passed; publication is
+  gated on remote CI, security, tag, and download verification
 - **Scope:** seal the v1.1.0 version and changelog, remove drift-prone status
   counts, provide a tested Windows Git-Bash entry point, build deterministic
   artifacts, publish only after required CI succeeds, and independently verify

@@ -357,3 +357,17 @@ Planning decision: the change is release-visible and crosses source, docs,
 workflow, and remote publication boundaries, so independent review and the
 required Run Guard gate are part of acceptance. CodeGraph remains optional;
 no real indexing is claimed.
+
+Checkpoint evidence before publication:
+
+- Independent reviewer returned `PASS — implementation/publication-ready`.
+- The local worktree is clean at the reviewed implementation checkpoint;
+  implementation scope is 22 unique files, within the 32-file sprint budget,
+  and no forbidden path changed.
+- Local validation passed: repository unittest discovery, Windows Git-Bash
+  setup/verify/evals, default Doctor, CI Doctor gate, deterministic double
+  build, archive `--validate`, clean-HEAD rebuild comparison, and corrupted
+  CodeGraph rejection. Exact host-dependent pass/skip counts remain evidence,
+  not repository invariants.
+- Publication is intentionally still pending: `origin/main` remains at the
+  pre-sprint commit until required CI/security workflows succeed.

@@ -5,15 +5,16 @@ Based On State Version: v2.0
 
 ## New-Session Summary
 
-- **Current phase:** RELEASE-CANDIDATE — v1.0.0 remains published while v1.1.0
-  is prepared under Apache License 2.0
+- **Current phase:** RELEASE-CANDIDATE — v1.0.0 remains published while the
+  reviewed and locally validated v1.1.0 is pending remote publication under
+  Apache License 2.0
 - **Current axis:** public, auditable, reproducible template
 - **Current Sprint:** `RELEASE-V1.1.0` — seal the current release contract,
   update versioned artifacts and docs, add the Windows Git-Bash helper, then
   publish and independently verify the new Release only after CI succeeds.
 - **Default action:** follow `docs/control/NEXT_CODEX_TASK.md`; keep the
-  default Doctor free of blocking failures and keep the historical `v1.0.0`
-  tag and Release unchanged.
+  default Doctor free of blocking failures, wait for required remote checks
+  before tagging, and keep the historical `v1.0.0` tag and Release unchanged.
 
 ## Technical Baseline
 
