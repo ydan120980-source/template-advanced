@@ -568,3 +568,71 @@ download, checksum verification, or tagged-source verification was performed.
 The task stops at the independent review gate. The new Run Guard remains
 `not_ready` with `gate.review` as the only blocking finding before any later
 control-document refresh; command budget snapshot is deferred until review.
+
+## RELEASE-V1.1.0-FINAL-CLOSEOUT — new test race discovered and sealed
+
+Date: 2026-08-02
+Status: superseded by RELEASE-V1.1.0-FLAKE-FIX
+Mode: Full
+
+After the exact-head checks passed for `cfcafad`, a new cross-environment
+test reliability issue was confirmed in
+`tests/aiwf_run_guard/test_procutil.py`:
+`test_timeout_preserves_partial_stdout_and_stderr` unconditionally expected
+partial output from a newly started Python interpreter within a one-second
+timeout. On slow Linux, VM, or high-load hosts the child can time out before
+any output exists; `TimeoutExpired.output/stderr = None` and empty result
+streams are legal behavior, not proof of output loss by `run_process_tree()`.
+
+The FINAL-CLOSEOUT task is sealed with this exact result:
+
+    Task ID: RELEASE-V1.1.0-FINAL-CLOSEOUT
+    Implementation and evidence correction: completed
+    Exact remote candidate: cfcafade749f1efaeb5387b62a6d9feb3fcea390
+    Exact-head CI/Security: passed
+    Independent GitHub approval: missing
+    New cross-environment test race discovered: yes
+    Publication: not completed
+    Final gate: not_ready
+    Superseded by: RELEASE-V1.1.0-FLAKE-FIX
+
+Its exact-head evidence (CI 30743336624, Security 30743336620, additional
+CodeQL passed) applies only to `cfcafad` and must not be reused after the PR
+head changes.
+
+## RELEASE-V1.1.0-FLAKE-FIX — planning and bootstrap
+
+Date: 2026-08-02
+Status: planned; implementation and full validation in progress
+Mode: Full
+
+The new Task Packet was created after a read-only local baseline and before
+any test-file change. Its frozen budgets are:
+
+- file budget: 6;
+- artifact budget: 6;
+- retry budget: 2;
+- shell-command budget: 70.
+
+Scope is limited to the partial-output timeout test race, the deterministic
+mock contracts, the no-output timeout contract, the necessary control-state
+records, and the protected remote publication sequence. No production change
+is planned; `tools/aiwf_run_guard/procutil.py` may change only if tests prove
+a real output-loss defect.
+
+Bootstrap evidence:
+
+- local branch `codex/release-v1.1.0`;
+- local HEAD and remote-tracking branch
+  `cfcafade749f1efaeb5387b62a6d9feb3fcea390`;
+- ahead/behind 0/0 and worktree clean;
+- local `v1.0.0` exists (`643eac2`) and local `v1.1.0` is absent;
+- PR #2 open and mergeable, `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`;
+- Task Packet commit `a99e5029f37d55aedfb88765cb755668066c5c62`.
+
+Focused Windows validation passed before the full chain: the rewritten
+partial-output test passed 10/10 runs and the whole `test_procutil` module
+passed 5/5 runs under `-W error::ResourceWarning` (11 tests, one
+platform-expected skip), with no residual test-created `cmd.exe`/`ping.exe`
+processes. Full validation from the final local commit, push, exact-head
+remote checks, and the independent review gate remain pending.

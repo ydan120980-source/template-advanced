@@ -38,6 +38,43 @@ def _sleep_command(seconds: int) -> list[str]:
     return ["sh", "-c", f"sleep {seconds}; echo done"]
 
 
+def _partial_output_timeout_command() -> tuple[list[str], int]:
+    """Immediate platform-native stdout/stderr followed by a bounded wait.
+
+    The command must not depend on Python interpreter startup speed: the
+    platform shell writes both streams before the long-running wait begins,
+    so a timeout that preserves partial output does not race interpreter
+    startup.
+    """
+    if os.name == "nt":
+        return (
+            [
+                os.environ.get("COMSPEC", "cmd.exe"),
+                "/d",
+                "/s",
+                "/c",
+                (
+                    "(echo before "
+                    "& echo err-before 1>&2 "
+                    "& ping -n 61 127.0.0.1 >nul)"
+                ),
+            ],
+            3,
+        )
+    return (
+        [
+            "sh",
+            "-c",
+            (
+                "printf 'before\\n'; "
+                "printf 'err-before\\n' >&2; "
+                "exec sleep 60"
+            ),
+        ],
+        2,
+    )
+
+
 class ProcessTreeTimeoutTests(unittest.TestCase):
     maxDiff = None
 
@@ -133,22 +170,20 @@ class ProcessTreeTimeoutTests(unittest.TestCase):
         self.assertEqual(result.stderr.strip(), "err")
 
     def test_timeout_preserves_partial_stdout_and_stderr(self) -> None:
-        command = [
-            sys.executable,
-            "-c",
-            (
-                "import sys, time; print('before', flush=True); "
-                "print('err-before', file=sys.stderr, flush=True); time.sleep(60)"
-            ),
-        ]
+        command, timeout = _partial_output_timeout_command()
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("error", ResourceWarning)
-            result = run_process_tree(command, timeout=1, label="partial-output")
+            result = run_process_tree(
+                command,
+                timeout=timeout,
+                label="partial-output",
+            )
             gc.collect()
         self.assertFalse(
             [warning for warning in caught if issubclass(warning.category, ResourceWarning)]
         )
         self.assertTrue(result.timed_out)
+        self.assertIsNotNone(result.returncode)
         self.assertIn("before", result.stdout)
         self.assertIn("err-before", result.stderr)
 
@@ -192,11 +227,44 @@ class ProcessTreeTimeoutTests(unittest.TestCase):
                 )
 
         self.assertTrue(result.timed_out)
+        self.assertEqual(result.returncode, -15)
         self.assertEqual(result.stdout, "partial-out")
         self.assertEqual(result.stderr, "partial-err")
         process.stdin.close.assert_called_once_with()
         process.stdout.close.assert_called_once_with()
         process.stderr.close.assert_called_once_with()
+        process.wait.assert_called()
+
+    def test_timeout_before_any_output_returns_empty_streams(self) -> None:
+        """A timeout before any output is produced legally returns empty streams."""
+
+        with mock.patch("tools.aiwf_run_guard.procutil.subprocess.Popen") as popen:
+            process = popen.return_value
+            process.stdin = mock.Mock()
+            process.stdout = mock.Mock()
+            process.stderr = mock.Mock()
+            process.communicate.side_effect = [
+                subprocess.TimeoutExpired(
+                    [sys.executable, "-c", "pass"],
+                    1,
+                    output=None,
+                    stderr=None,
+                ),
+                (None, None),
+            ]
+            process.returncode = -15
+            process.poll.return_value = -15
+            with mock.patch("tools.aiwf_run_guard.procutil._terminate_tree"):
+                result = run_process_tree(
+                    [sys.executable, "-c", "pass"],
+                    timeout=1,
+                    label="mock-timeout-empty",
+                )
+
+        self.assertTrue(result.timed_out)
+        self.assertIsNotNone(result.returncode)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
 
     def test_tree_kill_leaves_no_residual_processes(self) -> None:
         """A killed tree must not leave descendants running afterwards."""
