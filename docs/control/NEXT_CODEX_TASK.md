@@ -9,6 +9,10 @@ This is a bounded public-release sprint. It promotes the verified current
 `main` line to `v1.1.0` without moving or replacing the historical `v1.0.0`
 tag or Release.
 
+The released template onboarding baseline remains identified as
+`TEMPLATE-ONBOARDING-V1`; this maintenance packet supersedes it only for the
+current release sprint.
+
 ## Goal
 
 Seal the current release contract, remove drift-prone status wording, provide a
@@ -77,6 +81,14 @@ no indexing success may be claimed.
   GitHub workflows have succeeded;
 - uploading local release artifacts in place of tag-CI artifacts;
 - continuing after a failed required validation or a remote publication error.
+
+## Budget
+
+- Maximum files changed: 32
+- Maximum shell-command requests: 160 across the main and reviewer sources
+- Retry limit: 2
+- Unique published delivery files: 12; local planning and temporary validation
+  output do not count as release files.
 
 ## Run Guard
 
