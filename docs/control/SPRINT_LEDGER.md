@@ -443,3 +443,37 @@ Bootstrap evidence:
 
 No publication action is accepted until final-commit checks and an
 independent GitHub human approval are both present.
+
+## RELEASE-V1.1.0-PUBLISH — final-head validation and review-gate stop
+
+Date: 2026-08-02
+Status: BLOCKED: independent human approval required
+Mode: Full
+
+The final implementation/publication-correction commit was created without
+amending the historical task and pushed to the existing feature branch:
+
+- branch: `codex/release-v1.1.0`;
+- final local SHA: `6e357d55f813bdc6a823ea0f94fd8ef01ee54de4`;
+- final remote SHA: `6e357d55f813bdc6a823ea0f94fd8ef01ee54de4`;
+- PR #2: open and mergeable, but `mergeStateStatus=BLOCKED`;
+- review evidence: `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`.
+
+Final remote checks for that exact head passed:
+
+- CI run `30737700031`: Ubuntu/Windows/macOS Python 3.11/3.12/3.13,
+  9/9 jobs passed;
+- Security run `30737700025`: `codeql` and `credential-scan` passed;
+- the additional CodeQL check also passed.
+
+The new Run Guard recorded the final-head validation and the external review
+stop. Its current summary is 8 events, 0/2 retries, 11/12 unique artifact
+files, and 2/2 validation events passed. The integration gate is `not_ready`
+with one failure, `gate.review`; the command budget is intentionally not
+snapshotted while the required review is pending.
+
+No protected merge, merged-main validation, v1.1.0 tag, tag workflow, Release
+creation, asset download, checksum verification, or tagged-source verification
+was performed. These actions remain blocked by the task packet and branch
+protection until an independent GitHub human approves PR #2. Self-review,
+administrator bypass, and reporting publication success are prohibited.

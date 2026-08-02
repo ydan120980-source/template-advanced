@@ -1,7 +1,7 @@
 # CHATGPT_HANDOFF.md
 
 Last Updated: 2026-08-02
-Based On State Version: v2.1
+Based On State Version: v2.2
 
 ## New-session summary
 
@@ -16,7 +16,8 @@ Based On State Version: v2.1
 - Current Run Guard: a new external plan was initialized with a 100 shell-
   command budget, two retries, and a 12-file artifact budget. Do not reuse the
   old plan.
-- Current hard stop: no GitHub independent human review is present yet.
+- Current hard stop: final feature-branch CI and Security checks passed, but
+  no GitHub independent human review is present; PR #2 remains blocked.
 
 ## Historical task facts
 
@@ -60,6 +61,22 @@ input.json bootstrap configuration, later moved outside the repository.
 Re-read all values after every GitHub transition. Old-commit checks cannot
 prove final-commit readiness.
 
+## Final feature-branch checkpoint
+
+- final feature-branch SHA: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+- remote feature-branch SHA: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+- PR #2: open, mergeable, `mergeStateStatus=BLOCKED`
+- review state: `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`
+- CI run 30737700031: Ubuntu/Windows/macOS Python 3.11/3.12/3.13, 9/9
+  passed
+- Security run 30737700025: `codeql` and `credential-scan` passed
+- additional CodeQL check: passed
+- v1.1.0 tag and Release: absent; merge, tag, Release, and asset download
+  were not performed
+- Run Guard: 8 events, 0/2 retries, 11/12 artifacts, validation 2/2 passed;
+  gate `not_ready` solely because review is required; command budget remains
+  unsnapshotted while review is pending
+
 ## Technical contracts
 
 - Release builds require a clean Git HEAD and read release files from Git
@@ -89,8 +106,8 @@ prove final-commit readiness.
 3. Commit without amending 5479512.
 4. Push codex/release-v1.1.0 with bounded retries.
 5. Confirm PR #2 head equals the pushed commit and wait for final checks.
-6. Stop if reviewDecision is REVIEW_REQUIRED; report BLOCKED: independent
-   human approval required.
+6. Final checks passed, but stop because reviewDecision is REVIEW_REQUIRED;
+   report BLOCKED: independent human approval required.
 7. After real approval, merge through branch protection and confirm local
    main equals origin/main cleanly.
 8. Re-run merged-main validation, then create and push v1.1.0 exactly once.

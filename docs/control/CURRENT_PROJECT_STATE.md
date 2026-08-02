@@ -1,16 +1,17 @@
 # CURRENT_PROJECT_STATE.md
 
 Last Updated: 2026-08-02
-State Version: v2.1
+State Version: v2.2
 Is state stale?: no
-Based On Commit: manual record; refresh after the new task commit
-Current Git HEAD: manual record; refresh from Git after each transition
+Based On Commit: manual record - validated remote checkpoint 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+Current Git HEAD: manual record - validated remote checkpoint 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
 
 ## 1. Current Project Phase
 
 - Current Phase: RELEASE-CANDIDATE
 - Phase Status: the original v1.1.0 implementation sprint is closed as a
-  governance failure; the publication-only correction sprint is active.
+  governance failure; the publication-only correction sprint is blocked at
+  the required independent GitHub human-review gate.
 - Phase Goal: publish only the exact, protected, independently reviewed
   v1.1.0 merge result and validate the canonical remote artifacts.
 - Historical v1.0.0 remains published and immutable.
@@ -19,9 +20,9 @@ Current Git HEAD: manual record; refresh from Git after each transition
 
 - Task ID: RELEASE-V1.1.0-PUBLISH
 - Mode: Full
-- State: new task packet and new Run Guard initialized; local evidence and
-  release-note corrections are being prepared before the final feature-branch
-  push.
+- State: final feature-branch commit was pushed; its protected CI and Security
+  checks passed; no independent GitHub human approval is present, so no merge,
+  tag, or Release action is permitted.
 - Required review: independent GitHub human approval; local implementation
   review is not sufficient.
 - CodeGraph: optional maintainer capability; no real project-level index is
@@ -70,10 +71,27 @@ The following was rechecked before the new packet:
 - PR #2: open, mergeable, blocked by required review
 - Old PR checks: green for d1c7a2a only; they are not final-commit evidence
 
+## 5. Final Feature-Branch Checkpoint
+
+The final candidate was committed and pushed without amending the historical
+5479512 commit:
+
+- Final feature-branch SHA: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+- Remote feature-branch SHA: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+- PR #2: open, mergeable, `mergeStateStatus=BLOCKED`
+- PR review state: `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`
+- CI run: 30737700031; Ubuntu/Windows/macOS Python 3.11/3.12/3.13 = 9/9
+  passed
+- Security run: 30737700025; `codeql` and `credential-scan` passed
+- Additional CodeQL check: passed
+- v1.1.0 tag and Release: still absent
+- Merge, tag, Release creation, and asset download: not performed because the
+  independent review stop condition is active
+
 The current branch, remote branch, merged main SHA, tag SHA, workflow run IDs,
 and Release metadata must be refreshed from GitHub after each transition.
 
-## 5. Control Hierarchy
+## 6. Control Hierarchy
 
 When documents conflict, use this order:
 
@@ -87,7 +105,7 @@ When documents conflict, use this order:
 Planning journals and Run Guard evidence may record execution but cannot expand
 the packet scope, relax a stop condition, or alter a historical result.
 
-## 6. Canonical Contracts
+## 7. Canonical Contracts
 
 - Template Doctor is a Python-standard-library CLI with deterministic reports
   and blocking-failure semantics.
@@ -111,17 +129,18 @@ the packet scope, relax a stop condition, or alter a historical result.
   in strict mode. A corrupt or structurally unrecognized database blocks all
   modes. No official schema or real index is claimed.
 
-## 7. Active Priorities
+## 8. Active Priorities
 
-1. Complete only the bounded publication correction in the new task packet.
-2. Keep v1.0.0 unchanged and never move or replace its tag or Release.
-3. Require final-commit CI/Security, independent human approval, protected
-   merge, merged-main validation, tag workflow success, and independent asset
-   verification in that order.
+1. Await an independent GitHub human approval for PR #2; do not self-review
+   or bypass branch protection.
+2. If approval arrives, re-read the final PR head and required checks before
+   protected merge, then continue with merged-main validation and tag-only
+   publication in the task-packet order.
+3. Keep v1.0.0 unchanged and never move or replace its tag or Release.
 4. Keep exact host-dependent Doctor and Preflight counts in evidence only.
 5. Keep source archives separate from canonical deterministic Release assets.
 
-## 8. File-Count Evidence
+## 9. File-Count Evidence
 
 The prior task must distinguish:
 
@@ -137,10 +156,11 @@ the final tracked diff or published Release. If later evidence disproves this
 reason, the next Ledger entry must correct it rather than silently changing a
 count.
 
-## 9. Risks And Stop Rules
+## 10. Risks And Stop Rules
 
 - No independent GitHub human approval is currently present.
-- The current remote PR head is older than the local candidate.
+- The final feature-branch CI and Security checks are green, but branch
+  protection still blocks the PR because review is required.
 - GitHub branch protection and required checks are external state and must be
   reported from live results.
 - A failed final check, merge, tag workflow, checksum, manifest, digest, or
@@ -148,8 +168,8 @@ count.
 - Network failures are not code failures; record BLOCKED: network unavailable
   and preserve local work.
 
-## 10. State Freshness
+## 11. State Freshness
 
-The commit fields above are manual records because a committed file cannot
-self-reference the commit that contains it. Remote publication facts must be
-refreshed live after each transition.
+The commit fields above identify the validated parent checkpoint because a
+committed file cannot self-reference the commit that contains it. Remote
+publication facts must be refreshed live after each transition.
