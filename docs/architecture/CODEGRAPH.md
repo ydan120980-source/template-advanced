@@ -6,7 +6,7 @@ use Template Doctor or Run Guard.
 
 ## Current Status
 
-`CodeGraph configuration prepared; real indexing not verified in this environment.`
+`CodeGraph configuration prepared; no real v1.1.0 indexing was performed because the required tool was unavailable in the release environment.`
 
 No CodeGraph CLI or Codex CodeGraph tool was available in the release
 environment, so no index was created and no index was committed. This

@@ -3,7 +3,7 @@
 
 Usage (from the repository root):
 
-    py -3 scripts/build-release.py [--version 1.0.0] [--out-dir dist]
+    py -3 scripts/build-release.py [--version <version>] [--out-dir dist]
 
 The builder selects files with the canonical allowlist and exclusion rules in
 ``tools/template_doctor/release_inventory.py``, records relative path, size,

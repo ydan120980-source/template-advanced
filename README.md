@@ -53,8 +53,18 @@ bash evals/run-evals.sh
 
 On Windows, run the same commands from Git Bash, or invoke the Git Bash
 executable directly; the documented commands call `bash` by name so no Unix
-executable bit is required. On Linux and macOS the identical commands work
-natively.
+executable bit is required. From PowerShell, use the repository helper so a
+WSL/System32 `bash.exe` launcher cannot be mistaken for Git Bash:
+
+```powershell
+powershell -NoProfile -File scripts/invoke-git-bash.ps1 scripts/setup.sh
+powershell -NoProfile -File scripts/invoke-git-bash.ps1 scripts/verify.sh
+powershell -NoProfile -File scripts/invoke-git-bash.ps1 evals/run-evals.sh
+```
+
+The helper derives Git Bash from `git.exe`, handles paths with spaces, forwards
+stdout/stderr and the exit code, and fails clearly when Git for Windows is not
+available. On Linux and macOS the identical Bash commands work natively.
 
 Python is invoked by platform throughout this document. On Linux and macOS use
 `python3`; on Windows Git Bash use `py -3`. On some Windows installations,
@@ -129,6 +139,11 @@ rule reports a non-blocking `skip`; the CI gate passes without an allowlist
 entry. Use `--strict` when an index is a hard requirement. See
 [docs/architecture/CODEGRAPH.md](docs/architecture/CODEGRAPH.md).
 
+The default release requirement is no blocking Doctor failure and a successful
+CI Doctor gate. Exact pass/skip totals depend on optional host capabilities
+such as Hooks, memory, MCP, CodeGraph, and an existing release manifest; they
+are not fixed project invariants.
+
 ## AIWF Run Guard
 
 ```bash
@@ -149,8 +164,8 @@ stop conditions. See [AIWF Run Guard](docs/ai-workflow/AIWF_RUN_GUARD.md).
 ```bash
 python3 scripts/build-release.py
 python3 scripts/verify-release-archive.py \
-  --archive dist/template-advanced-1.0.0.zip \
-  --manifest dist/template-advanced-1.0.0.manifest.json
+  --archive dist/template-advanced-1.1.0.zip \
+  --manifest dist/template-advanced-1.1.0.manifest.json
 ```
 
 On Windows Git Bash, substitute `python3` with `py -3`. The builder uses an
@@ -200,8 +215,8 @@ release artifacts.
 
    ```bash
    python3 scripts/verify-release-archive.py \
-     --archive template-advanced-1.0.0.zip \
-     --manifest template-advanced-1.0.0.manifest.json \
+     --archive template-advanced-1.1.0.zip \
+     --manifest template-advanced-1.1.0.manifest.json \
      --validate
    ```
 
@@ -213,10 +228,10 @@ release artifacts.
 
 ## Release Artifacts
 
-- `template-advanced-1.0.0.zip` — the deterministic release archive.
-- `template-advanced-1.0.0.manifest.json` — path, size, SHA-256, and mode for
+- `template-advanced-1.1.0.zip` — the deterministic release archive.
+- `template-advanced-1.1.0.manifest.json` — path, size, SHA-256, and mode for
   every file plus the publication digest.
-- `template-advanced-1.0.0.digest.txt` — the publication digest.
+- `template-advanced-1.1.0.digest.txt` — the publication digest.
 - `SHA256SUMS` — SHA-256 of the three files above.
 
 ## Continuous Integration
@@ -266,7 +281,8 @@ change rules, and local validation requirements.
   validation (recursive setup/verify/evals/doctor on a clean extraction) runs
   in `scripts/integration-test-release.sh`, which release CI executes.
 - CodeGraph is an optional maintainer capability; no index is committed and
-  no tool was available to verify real indexing in this environment. Without
+  no real indexing was performed for v1.1.0 because the required tool was not
+  available in the release environment. Without
   an index, Template Doctor reports `skip/info` by default and `fail/error`
   under `--strict`; a present but corrupt or invalid database is always a
   blocking failure. The Doctor's check is a heuristic and does not prove

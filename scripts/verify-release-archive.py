@@ -3,7 +3,7 @@
 
 Usage (from the repository root):
 
-    py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json
+    py -3 scripts/verify-release-archive.py --archive dist/template-advanced-<version>.zip --manifest dist/template-advanced-<version>.manifest.json
 
 Optional:
 

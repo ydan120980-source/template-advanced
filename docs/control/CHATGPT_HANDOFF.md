@@ -5,14 +5,15 @@ Based On State Version: v2.0
 
 ## New-Session Summary
 
-- **Current phase:** RELEASED — v1.0.0 published under Apache License 2.0
+- **Current phase:** RELEASE-CANDIDATE — v1.0.0 remains published while v1.1.0
+  is prepared under Apache License 2.0
 - **Current axis:** public, auditable, reproducible template
-- **Current Sprint:** `TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02` (restore
-  POSIX process execution, close all process pipes, and bound Release
-  integration) — implementation and validation complete; awaiting User review
-- **Default action:** follow `docs/control/NEXT_CODEX_TASK.md` (the onboarding
-  packet) to initialize a real project; keep `bash scripts/verify.sh`,
-  `bash evals/run-evals.sh`, and Template Doctor green.
+- **Current Sprint:** `RELEASE-V1.1.0` — seal the current release contract,
+  update versioned artifacts and docs, add the Windows Git-Bash helper, then
+  publish and independently verify the new Release only after CI succeeds.
+- **Default action:** follow `docs/control/NEXT_CODEX_TASK.md`; keep the
+  default Doctor free of blocking failures and keep the historical `v1.0.0`
+  tag and Release unchanged.
 
 ## Technical Baseline
 

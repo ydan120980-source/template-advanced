@@ -35,8 +35,12 @@ bash scripts/verify.sh
 bash evals/run-evals.sh
 py -3 -B -m tools.template_doctor --root . --format json
 py -3 scripts/build-release.py
-py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json
+py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.1.0.zip --manifest dist/template-advanced-1.1.0.manifest.json
 ```
+
+From Windows PowerShell, invoke Bash scripts through
+`powershell -NoProfile -File scripts/invoke-git-bash.ps1 <script>` so a WSL
+launcher cannot be selected accidentally.
 
 `verify.sh` runs lint, the standard-library structural check (import and
 annotation contracts, not full semantic type inference), and the unit-test

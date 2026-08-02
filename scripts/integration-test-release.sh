@@ -54,11 +54,12 @@ import zipfile
 from pathlib import Path
 
 from tools.aiwf_run_guard.procutil import ProcessResult, run_process_tree
+from tools.template_doctor.release_inventory import RELEASE_VERSION
 
 
 ROOT = Path(sys.argv[1]).resolve()  # work dir
 REPO = Path.cwd().resolve()
-STEM = "template-advanced-1.0.0"
+STEM = f"template-advanced-{RELEASE_VERSION}"
 MAX_OUTPUT_CHARS = 4000
 BUILD_TIMEOUT_SECONDS = 120
 BASIC_VALIDATION_TIMEOUT_SECONDS = 120

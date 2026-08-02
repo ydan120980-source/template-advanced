@@ -24,8 +24,10 @@ import hashlib
 import os
 from pathlib import Path
 
+from tools.project_version import PROJECT_VERSION
 
-RELEASE_VERSION = "1.0.0"
+
+RELEASE_VERSION = PROJECT_VERSION
 RELEASE_ROOT_NAME = "template-advanced"
 
 # Explicit top-level allowlist. Anything not named here is never a release

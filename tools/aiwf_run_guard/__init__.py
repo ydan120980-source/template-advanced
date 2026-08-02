@@ -4,6 +4,7 @@ from .config import CommandBudgetConfig, RunConfig, WorkstreamConfig, load_confi
 from .gate import evaluate_gate
 from .ledger import append_event, initialize_run, read_events
 from .models import AuditReport, Event, Finding, RunGuardError
+from tools.project_version import PROJECT_VERSION
 
 __all__ = [
     "AuditReport",
@@ -20,4 +21,4 @@ __all__ = [
     "read_events",
 ]
 
-__version__ = "1.0.0"
+__version__ = PROJECT_VERSION

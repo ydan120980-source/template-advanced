@@ -6,15 +6,15 @@ Is state stale?: no
 
 ## 1. Current Project Phase
 
-- **Current Phase:** RELEASED
-- **Phase Status:** v1.0.0 published under Apache License 2.0
+- **Current Phase:** RELEASE-CANDIDATE
+- **Phase Status:** v1.0.0 remains published; v1.1.0 release sprint is in progress
 - **Phase Goal:** provide a portable, verifiable, publishable starting point
   for a new Codex-governed project
 
-This checkout is the released template. It is licensed under the Apache
-License 2.0, has a public Git baseline on `main`, and runs GitHub Actions CI
-for validation and release artifacts. A new project starts by following the
-onboarding packet in `docs/control/NEXT_CODEX_TASK.md`.
+This checkout is the release candidate for the next template version. It is
+licensed under the Apache License 2.0, has a public Git baseline on `main`,
+and runs GitHub Actions CI for validation and release artifacts. The historical
+`v1.0.0` tag and Release remain unchanged while this sprint prepares `v1.1.0`.
 
 ## 2. Control Hierarchy
 
@@ -158,14 +158,14 @@ artifacts retain their cross-platform byte-determinism contract.
 
 ## 9. Current Sprint
 
-- **Task ID:** `TEMPLATE-POSIX-RELEASE-HYGIENE-2026-08-02`
-- **Mode:** Lite
-- **State:** implementation and validation complete; awaiting User review
-- **Scope:** restore platform-specific Popen arguments, close all Run Guard
-  process pipes, bound every Release integration stage through the shared
-  process-tree helper, preserve timeout/tree cleanup, exclude local Claude
-  state from source delivery, and document Git-based source archives without a
-  cross-platform ZIP-byte claim.
+- **Task ID:** `RELEASE-V1.1.0`
+- **Mode:** Full
+- **State:** implementation in progress; publication is gated on local and
+  remote validation
+- **Scope:** seal the v1.1.0 version and changelog, remove drift-prone status
+  counts, provide a tested Windows Git-Bash entry point, build deterministic
+  artifacts, publish only after required CI succeeds, and independently verify
+  downloaded assets. CodeGraph remains optional and unindexed.
 
 ## 10. State Freshness
 

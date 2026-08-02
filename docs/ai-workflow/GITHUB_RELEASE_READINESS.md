@@ -7,13 +7,16 @@ itself and to every project initialized from it.
 ## Local Technical Gate
 
 - [ ] Python 3.11+ and Bash prerequisites are documented and available.
+- [ ] On Windows PowerShell, `scripts/invoke-git-bash.ps1` resolves Git Bash,
+  rejects WSL/System32 launchers, and forwards script output and exit codes.
 - [ ] `bash scripts/setup.sh`, `bash scripts/verify.sh`, and
   `bash evals/run-evals.sh` pass from a clean checkout.
 - [ ] All Run Guard, Template Doctor, and release-readiness `unittest` suites
   pass with bytecode generation disabled.
-- [ ] Template Doctor has no release-content failure beyond the explicitly
-  deferred missing-Git-baseline finding (a missing CodeGraph index is an
-  optional capability reported as a non-blocking `skip`).
+- [ ] The default Template Doctor has no blocking failure. A missing CodeGraph
+  index is an optional capability reported as a non-blocking `skip`; strict
+  mode may fail only for intentionally unconfigured optional maintainer
+  capabilities documented by the project.
 - [ ] The committed `.codex/config.toml` keeps safe defaults
   (`approval_policy = "on-request"`, `sandbox_mode = "workspace-write"`,
   network access off unless explicitly opted in); Template Doctor's
@@ -104,7 +107,8 @@ The template itself has completed these decisions:
 - [x] Apache License 2.0 selected (`LICENSE`, `NOTICE`).
 - [x] Git baseline established with `main` as the default branch.
 - [x] GitHub Actions CI, release-artifacts, and security workflows enabled.
-- [x] Public GitHub repository created and `v1.0.0` release published.
+- [x] Public GitHub repository created and historical `v1.0.0` release
+  preserved.
 
 A project copied from the template must still decide, per copy:
 

@@ -14,13 +14,13 @@ import unittest
 import zipfile
 
 from tools.template_doctor.release_inventory import (
+    RELEASE_VERSION,
     ReleaseEntry,
     publication_digest,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RELEASE_VERSION = "1.0.0"
 STEM = f"template-advanced-{RELEASE_VERSION}"
 
 
@@ -277,6 +277,58 @@ class ReleasePipelineTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("usage", completed.stdout.lower())
+
+    def test_powershell_git_bash_wrapper_handles_spaces_and_forwards_exit_code(self) -> None:
+        from tools.aiwf_run_guard.procutil import run_process_tree
+
+        powershell = shutil.which("powershell") or shutil.which("pwsh")
+        git = shutil.which("git")
+        if not powershell or not git or os.name != "nt":
+            self.skipTest("Windows PowerShell and Git are required for this wrapper test")
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            script = Path(temporary_directory) / "path with spaces" / "probe.sh"
+            script.parent.mkdir(parents=True)
+            script.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf 'stdout:%s\\n' \"$1\"\n"
+                "printf 'stderr:%s\\n' \"$2\" >&2\n"
+                "exit 7\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            completed = run_process_tree(
+                [
+                    powershell,
+                    "-NoProfile",
+                    "-File",
+                    str(REPO_ROOT / "scripts" / "invoke-git-bash.ps1"),
+                    str(script),
+                    "left value",
+                    "right value",
+                ],
+                timeout=30,
+                label="git-bash-wrapper",
+            )
+
+        self.assertEqual(completed.returncode, 7, completed.stderr)
+        self.assertIn("stdout:left value", completed.stdout)
+        self.assertIn("stderr:right value", completed.stderr)
+
+    def test_release_version_is_shared_and_workflow_names_are_dynamic(self) -> None:
+        from tools.aiwf_run_guard import __version__ as run_guard_version
+        from tools.project_version import PROJECT_VERSION
+        from tools.template_doctor import __version__ as doctor_version
+
+        self.assertEqual(PROJECT_VERSION, "1.1.0")
+        self.assertEqual(RELEASE_VERSION, PROJECT_VERSION)
+        self.assertEqual(doctor_version, PROJECT_VERSION)
+        self.assertEqual(run_guard_version, PROJECT_VERSION)
+        workflow = (REPO_ROOT / ".github" / "workflows" / "release-artifacts.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("RELEASE_STEM", workflow)
+        self.assertNotIn("template-advanced-1.0.0", workflow)
 
     def test_shared_policy_has_exactly_git_baseline_allowed(self) -> None:
         from tools.template_doctor.policy import (

@@ -4,6 +4,7 @@
 
 | Version | Supported |
 | ------- | --------- |
+| v1.1.0  | Yes       |
 | v1.0.0  | Yes       |
 
 Only tagged releases are supported. The current development branch receives
@@ -64,8 +65,8 @@ Before trusting any downloaded release:
 
    ```bash
    python scripts/verify-release-archive.py \
-     --archive template-advanced-1.0.0.zip \
-     --manifest template-advanced-1.0.0.manifest.json \
+     --archive template-advanced-1.1.0.zip \
+     --manifest template-advanced-1.1.0.manifest.json \
      --validate
    ```
 

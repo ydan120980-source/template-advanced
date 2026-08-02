@@ -340,3 +340,20 @@ Suggested Next Step:
 - Review the local closeout commit and decide separately whether to prepare a
   corrected public release; do not push or publish automatically.
 ```
+
+## RELEASE-V1.1.0 — planning and implementation start
+
+Date: 2026-08-02
+Status: in progress
+Mode: Full
+
+The current `main` line is being prepared as `v1.1.0`. The historical
+`v1.0.0` tag and Release remain immutable. This sprint is limited to version
+and changelog sealing, documentation contract cleanup, a tested Windows
+Git-Bash entry point, deterministic release construction, tag/Release
+publication after successful CI, and independent download verification.
+
+Planning decision: the change is release-visible and crosses source, docs,
+workflow, and remote publication boundaries, so independent review and the
+required Run Guard gate are part of acceptance. CodeGraph remains optional;
+no real indexing is claimed.
