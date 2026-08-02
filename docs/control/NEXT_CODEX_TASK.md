@@ -49,6 +49,7 @@ no indexing success may be claimed.
 - `SECURITY.md`
 - `docs/ai-workflow/GITHUB_RELEASE_READINESS.md`
 - `docs/architecture/README.md`
+- `docs/architecture/CODEGRAPH.md`
 - `docs/control/NEXT_CODEX_TASK.md`
 - `docs/control/CURRENT_PROJECT_STATE.md`
 - `docs/control/CHATGPT_HANDOFF.md`
