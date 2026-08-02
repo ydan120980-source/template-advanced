@@ -107,9 +107,9 @@ it does not reuse earlier budgets or events.
 
 1. Initialize the independent FLAKE-FIX Run Guard before implementation.
 2. Commit the Task Packet, then the test and control-state changes.
-3. Run focused repetition validation (10/10 single test, 5/5 module with
-   `-W error::ResourceWarning`) and the complete full chain from the final
-   local commit.
+3. Run focused repetition validation (repeated single-test runs and repeated
+   module runs with `-W error::ResourceWarning`) and the complete full chain
+   from the final local commit.
 4. Push only `codex/release-v1.1.0` with initial attempt plus at most two
    retries.
 5. Confirm PR #2 head equals the final local commit, then correct the PR body

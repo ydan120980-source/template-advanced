@@ -12,7 +12,7 @@ Live Remote PR Head: must be refreshed from GitHub before push, review,
 merge, tag, or Release
 
 Repository state record:
-current for the documented flake-fix stop condition
+current for the documented stop condition
 
 Remote state:
 must be refreshed live before every remote transition
@@ -35,7 +35,7 @@ must be refreshed live before every remote transition
 - Mode: Full
 - State: Task Packet committed (`a99e502`); the partial-output timeout test
   no longer depends on Python interpreter startup speed; focused Windows
-  validation passed (10/10 single-test runs, 5/5 module runs with
+  validation passed (repeated single-test runs and repeated module runs with
   `-W error::ResourceWarning`, no residual test processes). Full validation
   from the final local commit, push, and exact-head remote checks are the
   next steps.

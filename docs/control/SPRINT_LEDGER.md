@@ -631,8 +631,9 @@ Bootstrap evidence:
 - Task Packet commit `a99e5029f37d55aedfb88765cb755668066c5c62`.
 
 Focused Windows validation passed before the full chain: the rewritten
-partial-output test passed 10/10 runs and the whole `test_procutil` module
-passed 5/5 runs under `-W error::ResourceWarning` (11 tests, one
-platform-expected skip), with no residual test-created `cmd.exe`/`ping.exe`
-processes. Full validation from the final local commit, push, exact-head
-remote checks, and the independent review gate remain pending.
+partial-output test passed repeated single-test runs and the whole
+`test_procutil` module passed repeated module runs under
+`-W error::ResourceWarning` (platform-expected skip included), with no
+residual test-created `cmd.exe`/`ping.exe` processes. Full validation from
+the final local commit, push, exact-head remote checks, and the independent
+review gate remain pending.
