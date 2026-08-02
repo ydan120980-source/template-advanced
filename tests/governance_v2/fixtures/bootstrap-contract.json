@@ -1,0 +1,30 @@
+{
+  "acceptance": [
+    "The CLI is stdlib-only and is invokable with python -m tools.governance_v2.",
+    "issue sync and issue verify validate the frozen TaskContract and emit machine-readable JSON with the documented exit mapping.",
+    "migration build and migration verify produce and validate complete local PR #2 commit/path matrices without TODO, UNKNOWN, or REVIEW classifications.",
+    "bootstrap snapshot and bootstrap plan are read-only and emit machine-readable JSON.",
+    "Issue writes are rejected unless an explicit --confirm-write flag is present; the CLI does not create GOV-V2-BOOTSTRAP.",
+    "Unit tests cover canonical digests, event-chain integrity, fork detection, migration matrix validation, exit codes, and write confirmation."
+  ],
+  "allowed_paths": [
+    "tools/governance_v2/**",
+    "tests/governance_v2/**"
+  ],
+  "base_sha": "5893027b0c57a121b8726b72b39d133b58978f04",
+  "contract_digest": "210bc61087f463a0aca5f9092da39162b5e74008b94c92692ac1aec77ac8b9eb",
+  "forbidden_paths": [
+    "docs/control/**",
+    ".github/**",
+    ".codex/**",
+    "dependencies and lockfiles",
+    "v1.0.0 and v1.1.0 tags or releases",
+    "remote branch protection, rulesets, releases, tags, and issue writes except the explicit bootstrap issue",
+    "credentials, tokens, secrets, and local runtime caches"
+  ],
+  "goal": "Establish the v2 governance control plane and implement the bounded Stage 0 CLI without authorizing the CLI to create its own bootstrap contract.",
+  "repository_id": "ydan120980-source/template-advanced",
+  "schema_version": "governance.task/v2",
+  "task_id": "GOV-V2-BOOTSTRAP",
+  "task_type": "governance_bootstrap"
+}
