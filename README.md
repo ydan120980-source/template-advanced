@@ -249,6 +249,15 @@ The public repository runs three workflows:
 macOS validation is performed by GitHub Actions; only workflow results shown
 in the repository are treated as proof for that platform.
 
+The protected main and pull-request checks are the cross-platform matrix
+(Ubuntu, Windows, and macOS with Python 3.11, 3.12, and 3.13), plus CodeQL and
+credential scanning. The tag-triggered release workflow is a separate
+release-critical chain on its configured Ubuntu/Python 3.13 runner: it runs
+unit tests, Verify, Eval, Release integration, deterministic artifact
+construction, archive validation, and publication. A successful tag workflow
+therefore does not mean that the full cross-platform matrix ran on the tag;
+the protected main/PR checks must pass first.
+
 ## Repository Workflow
 
 1. Read `AGENTS.md` and the current Task Packet.

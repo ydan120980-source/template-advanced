@@ -371,3 +371,75 @@ Checkpoint evidence before publication:
   not repository invariants.
 - Publication is intentionally still pending: `origin/main` remains at the
   pre-sprint commit until required CI/security workflows succeed.
+
+## RELEASE-V1.1.0 — historical closure
+
+Date: 2026-08-02
+Status: governance final gate failed; superseded by RELEASE-V1.1.0-PUBLISH
+
+The earlier implementation and local-validation work is preserved, but the
+old task is not a complete PASS:
+
+    Implementation: completed
+    Local validation: passed
+    Governance final gate: failed
+    Reason: command budget exceeded, 166/160
+    Scope compliance: PARTIAL
+    Owner exception required: YES
+    Publication: not completed
+
+The original RELEASE-V1.1.0 task exceeded its command budget by six
+shell-command requests. The historical budget and event ledger remain
+unchanged. Publication work continues only under a new task packet.
+
+docs/architecture/CODEGRAPH.md was modified before it was included in the
+original Task Packet Allowed Paths. Its later addition was a retroactive scope
+correction and does not prove that the original scope was respected.
+
+The repository owner accepts the resulting CodeGraph documentation change as
+existing input to the new publication-only task. This is an owner exception;
+the original scope is not relabeled as fully respected.
+
+The earlier Run Guard evidence remains preserved with retry use 2/2, artifact
+files 12/12, command budget 166/160, and gate not_ready. The earlier local
+implementation-review PASS is not independent GitHub human approval.
+
+File-count reconciliation:
+
+    Final Git diff: 21 tracked files
+    Execution-time unique touched files: 22 files
+    Artifact file count: 12 files
+    Reason for difference: the Run Guard bootstrap configuration
+    .planning/RELEASE-V1.1.0/run-guard-input.json was temporarily created
+    during execution and then moved outside the repository. It is absent from
+    the final tracked diff and from Release assets.
+
+## RELEASE-V1.1.0-PUBLISH — planning and bootstrap
+
+Date: 2026-08-02
+Status: in progress
+Mode: Full
+
+The new publication-only Task Packet was created before implementation work.
+Its fixed budget is 12 changed files, 100 shell-command requests, two
+retries, and 12 unique Run Guard artifact files. A separate external Run
+Guard plan was initialized for this task; the old plan is not reused.
+
+Scope is limited to publication evidence, release-note accuracy, job-scoped
+workflow permissions, a static release-notes regression test, the existing PR
+branch, protected merge, v1.1.0 tag, tag workflow, canonical remote assets,
+and independent download verification. No new product or core-governance
+feature is authorized.
+
+Bootstrap evidence:
+
+- local branch codex/release-v1.1.0;
+- local candidate 547951233e4ea2b90f18ce658cf4e4adc3c7b04a;
+- remote PR branch d1c7a2a5766d39f2e0de240d3d657b1637444677;
+- origin/main 5893027b0c57a121b8726b72b39d133b58978f04;
+- v1.0.0 remains 643eac2900b00561666692d41c55ceef546f12e15;
+- v1.1.0 is absent;
+- PR #2 is open and review-required; old checks are not final-commit proof.
+
+No publication action is accepted until final-commit checks and an
+independent GitHub human approval are both present.

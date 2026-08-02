@@ -6,10 +6,12 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  build-and-verify:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -23,15 +25,15 @@ jobs:
         run: |
           set -euo pipefail
           version="$(python -B -c 'import sys; sys.path.insert(0, "."); from tools.template_doctor.release_inventory import RELEASE_VERSION; print(RELEASE_VERSION)')"
-          echo "RELEASE_VERSION=${version}" >> "$GITHUB_ENV"
-          echo "RELEASE_STEM=template-advanced-${version}" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_STEM=template-advanced-$version" >> "$GITHUB_ENV"
       - name: Tag and project version agree
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
-          expected="v${RELEASE_VERSION}"
+          expected="v$RELEASE_VERSION"
           if [ "$GITHUB_REF_NAME" != "$expected" ]; then
-            echo "tag ${GITHUB_REF_NAME} does not match project version ${expected}" >&2
+            echo "tag $GITHUB_REF_NAME does not match project version $expected" >&2
             exit 1
           fi
       - name: Unit tests
@@ -47,34 +49,55 @@ jobs:
           mkdir -p dist
           python scripts/build-release.py --version "$RELEASE_VERSION" --out-dir dist
       - name: Verify archive with clean extraction
-        run: python scripts/verify-release-archive.py --archive "dist/${RELEASE_STEM}.zip" --manifest "dist/${RELEASE_STEM}.manifest.json" --validate
+        run: python scripts/verify-release-archive.py --archive "dist/$RELEASE_STEM.zip" --manifest "dist/$RELEASE_STEM.manifest.json" --validate
       - name: Generate SHA256SUMS
         run: |
           cd dist
-          sha256sum "${RELEASE_STEM}.zip" "${RELEASE_STEM}.manifest.json" "${RELEASE_STEM}.digest.txt" > SHA256SUMS
+          sha256sum "$RELEASE_STEM.zip" "$RELEASE_STEM.manifest.json" "$RELEASE_STEM.digest.txt" > SHA256SUMS
           cat SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-assets
-          path: |
-            dist/${{ env.RELEASE_STEM }}.zip
-            dist/${{ env.RELEASE_STEM }}.manifest.json
-            dist/${{ env.RELEASE_STEM }}.digest.txt
-            dist/SHA256SUMS
+          path: dist
           if-no-files-found: error
-      - name: Attach assets to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-verify
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified build artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          mkdir -p dist
+          gh run download "$GITHUB_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name release-assets \
+            --dir dist
+      - name: Verify downloaded workflow artifact
+        run: |
+          set -euo pipefail
           cd dist
-          zip_sha=$(sha256sum "${RELEASE_STEM}.zip" | cut -d' ' -f1)
-          manifest_sha=$(sha256sum "${RELEASE_STEM}.manifest.json" | cut -d' ' -f1)
-          digest_sha=$(sha256sum "${RELEASE_STEM}.digest.txt" | cut -d' ' -f1)
-          digest_value=$(cat "${RELEASE_STEM}.digest.txt")
+          sha256sum -c SHA256SUMS
+      - name: Attach verified assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_version="$(printf '%s' "$GITHUB_REF_NAME" | sed 's/^v//')"
+          release_stem="template-advanced-$release_version"
+          cd dist
+          zip_sha=$(sha256sum "$release_stem.zip" | cut -d' ' -f1)
+          manifest_sha=$(sha256sum "$release_stem.manifest.json" | cut -d' ' -f1)
+          digest_sha=$(sha256sum "$release_stem.digest.txt" | cut -d' ' -f1)
+          digest_value=$(cat "$release_stem.digest.txt")
           notes=$(cat <<EOF
-          # template-advanced ${GITHUB_REF_NAME}
+          # template-advanced $GITHUB_REF_NAME
 
           Deterministic, evidence-driven engineering template for AI coding agents and Codex workflows.
 
@@ -94,10 +117,10 @@ jobs:
           ## Breaking or behavior changes
 
           - Formal release builds require a clean Git worktree and read release
-            files from the tagged `HEAD` commit.
-          - Release files that differ from `HEAD` block the build; non-Git
-            builds require explicit `--allow-unverified` and are labeled as
-            unverified source-tree builds.
+            files from the tagged HEAD commit.
+          - Release files that differ from HEAD block the build; non-Git builds
+            require explicit --allow-unverified and are labeled as unverified
+            source-tree builds.
           - A Git source ZIP is a traceable convenience archive, but its ZIP
             bytes are not promised to be identical across Git, zlib, and
             operating-system implementations. The custom Release ZIP is the
@@ -105,7 +128,15 @@ jobs:
 
           ## Validation
 
-          CI matrix: Ubuntu, Windows, macOS x Python 3.11, 3.12, 3.13. Unit tests, verify, evals, and the Doctor CI gate pass for the release tag.
+          Protected main/PR checks run on Ubuntu, Windows, and macOS with
+          Python 3.11, 3.12, and 3.13, plus CodeQL and credential scanning.
+          This tag-triggered workflow does not rerun that full cross-platform
+          matrix.
+
+          The tag workflow reruns the release-critical chain on Ubuntu with
+          Python 3.13: unit tests, Verify, Eval, Release integration,
+          deterministic artifact construction, archive verification, and
+          workflow-artifact checksum validation before publication.
 
           ## Artifacts
 
@@ -116,32 +147,33 @@ jobs:
 
           ## Verification
 
-          ZIP SHA-256: ${zip_sha}
-          Manifest SHA-256: ${manifest_sha}
-          Digest file SHA-256: ${digest_sha}
-          Publication digest: ${digest_value}
+          ZIP SHA-256: $zip_sha
+          Manifest SHA-256: $manifest_sha
+          Digest file SHA-256: $digest_sha
+          Publication digest: $digest_value
 
           Verify locally with:
 
           sha256sum -c SHA256SUMS
-          python scripts/verify-release-archive.py --archive "${RELEASE_STEM}.zip" --manifest "${RELEASE_STEM}.manifest.json" --validate
+          python scripts/verify-release-archive.py --archive "$release_stem.zip" --manifest "$release_stem.manifest.json" --validate
 
           ## Known limitations
 
-          - CodeGraph is an optional maintainer capability; no real v1.1.0 index was created because the required tool was unavailable.
+          - CodeGraph is an optional maintainer capability; no real project-level
+            index is claimed for this release because the required tool was
+            unavailable.
           - Source ZIP byte representation may vary across Git, zlib, and operating systems.
           - External global Codex configuration is outside project control.
           - Some GitHub security features depend on repository permissions.
 
           ## Upgrade
 
-          - Review the project-level `.codex/config.toml` safe defaults when
-            upgrading from `v1.0.0`.
+          - Review the project-level .codex/config.toml safe defaults when
+            upgrading from v1.0.0.
           - Build formal releases from a clean Git commit; do not compress the
             mutable working directory.
           - If an automation flow intentionally builds outside Git, pass
-            `--allow-unverified` explicitly and treat the output as
-            unverified.
+            --allow-unverified explicitly and treat the output as unverified.
 
           ## License
 
@@ -149,9 +181,7 @@ jobs:
           EOF
           )
           gh release create "$GITHUB_REF_NAME" \
-            "${RELEASE_STEM}.zip" "${RELEASE_STEM}.manifest.json" "${RELEASE_STEM}.digest.txt" SHA256SUMS \
-            --title "template-advanced ${GITHUB_REF_NAME}" \
+            "$release_stem.zip" "$release_stem.manifest.json" "$release_stem.digest.txt" SHA256SUMS \
+            --title "template-advanced $GITHUB_REF_NAME" \
             --notes "$notes" \
-            || gh release upload "$GITHUB_REF_NAME" \
-              "${RELEASE_STEM}.zip" "${RELEASE_STEM}.manifest.json" "${RELEASE_STEM}.digest.txt" SHA256SUMS \
-              --clobber
+            --verify-tag

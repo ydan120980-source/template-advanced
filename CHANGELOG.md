@@ -35,6 +35,20 @@ release tags exist.
   depend on optional host capabilities and existing manifests; release gates
   use blocking-failure semantics instead.
 
+### Verification and publication
+
+- Protected main-branch and pull-request checks run on Ubuntu, Windows, and
+  macOS with Python 3.11, 3.12, and 3.13, together with CodeQL and credential
+  scanning.
+- The tag-triggered release workflow does not rerun that full cross-platform
+  matrix. It reruns the configured release-critical chain on Ubuntu with
+  Python 3.13: unit tests, Verify, Eval, Release integration, deterministic
+  artifact construction, archive verification, and workflow-artifact checksum
+  validation before GitHub Release upload.
+- Exact Doctor, Run Guard preflight, and platform-specific pass/skip totals
+  depend on the host capabilities and operating system; they are release
+  evidence, not fixed repository invariants.
+
 ### Fixed
 
 - POSIX launches no longer pass the Windows-only `creationflags` argument;
@@ -50,6 +64,9 @@ release tags exist.
 ### Security
 
 - GitHub Actions remain pinned to full commit SHAs.
+- Release build-and-verify uses contents read; only the publish job receives
+  contents write. CodeQL alone receives security-events write, while the
+  credential scan remains contents read.
 - CI and archive validation reject unexpected Doctor failures; CodeGraph has no
   failure allowlist.
 - Corrupt or invalid project-local CodeGraph databases remain blocking errors,

@@ -1,88 +1,102 @@
 # CHATGPT_HANDOFF.md
 
 Last Updated: 2026-08-02
-Based On State Version: v2.0
+Based On State Version: v2.1
 
-## New-Session Summary
+## New-session summary
 
-- **Current phase:** RELEASE-CANDIDATE — v1.0.0 remains published while the
-  reviewed and locally validated v1.1.0 is pending remote publication under
-  Apache License 2.0
-- **Current axis:** public, auditable, reproducible template
-- **Current Sprint:** `RELEASE-V1.1.0` — seal the current release contract,
-  update versioned artifacts and docs, add the Windows Git-Bash helper, then
-  publish and independently verify the new Release only after CI succeeds.
-- **Default action:** follow `docs/control/NEXT_CODEX_TASK.md`; keep the
-  default Doctor free of blocking failures, wait for required remote checks
-  before tagging, and keep the historical `v1.0.0` tag and Release unchanged.
+- Current phase: RELEASE-CANDIDATE.
+- Historical v1.0.0 remains published and unchanged.
+- Historical task RELEASE-V1.1.0 is closed as implementation-complete,
+  locally validated, governance-failed, and publication-incomplete.
+- Current task: RELEASE-V1.1.0-PUBLISH.
+- Current task goal: correct publication evidence, push the final PR branch,
+  obtain final-commit CI/Security and independent human approval, merge through
+  protection, tag the merged main as v1.1.0, and validate the remote Release.
+- Current Run Guard: a new external plan was initialized with a 100 shell-
+  command budget, two retries, and a 12-file artifact budget. Do not reuse the
+  old plan.
+- Current hard stop: no GitHub independent human review is present yet.
 
-## Technical Baseline
+## Historical task facts
 
-- Python 3.11, 3.12, and 3.13 and Bash are supported; Git Bash is supported on
-  Windows.
-- Template Doctor, Run Guard, and the release pipeline use only the Python
-  standard library.
-- The release archive is built deterministically and verified independently.
-- Release builds require a clean Git commit: release files are read from the
-  Git object database at HEAD, and dirty, untracked, or deleted release files
-  block the build. Non-Git trees must opt in with `--allow-unverified` and
-  are labeled unverified-source-tree builds.
-- The committed `.codex/config.toml` keeps safe defaults (on-request
-  approval, workspace-write sandbox, network off); `approval_policy =
-  "never"` is never a template default.
-- The unit-test suite runs fast directed tests only; the recursive full
-  release validation runs in `scripts/integration-test-release.sh`, which
-  release CI executes. Validation subprocesses have bounded timeouts and
-  whole-process-tree termination. The integration runner uses the shared
-  process helper for named stages and reports bounded output tails on failure.
-- Run Guard process launches explicitly close stdin, stdout, and stderr on
-  normal, nonzero, timeout, and cleanup paths while preserving output; strict
-  `ResourceWarning` regression tests cover repeated timeouts and pipe state.
-- POSIX process launches pass `start_new_session=True` without the Windows-only
-  `creationflags` keyword; Windows uses its process-group creation flag.
-  Timeout errors identify the actual command, and the Git blob batch reader
-  closes all three pipes.
-- Source deliveries use `git archive HEAD`, which excludes `.git/`, untracked
-  local state such as `.claude/settings.local.json`, caches, and build output.
-  Its ZIP byte representation may vary across Git, zlib, or operating-system
-  implementations; formal release archives from `scripts/build-release.py`
-  retain the cross-platform byte-determinism guarantee. Do not distribute a
-  ZIP made by compressing the working directory.
-- CI runs on Ubuntu, Windows, and macOS; release artifacts are attached to
-  `v*` tags by the release-artifacts workflow.
-- CodeGraph is optional; `docs/architecture/CODEGRAPH.md` documents the
-  portable configuration and honest verification status. Template Doctor
-  reports an absent index as `skip/info` by default and `fail/error` under
-  `--strict`. The Doctor's check is a conservative heuristic: a project-local
-  database must be readable by SQLite, pass `quick_check`, and contain at
-  least one currently recognized candidate table (such as `nodes` or
-  `edges`); it does not prove compatibility with a complete or official
-  CodeGraph schema. A corrupt or invalid project-local database is always a
-  blocking failure, and no CI or release allowlist covers it.
+The old task must remain described exactly as follows:
 
-## Boundaries
+    Implementation: completed
+    Local validation: passed
+    Governance final gate: failed
+    Reason: command budget exceeded, 166/160
+    Scope compliance: PARTIAL
+    Owner exception required: YES
+    Publication: not completed
 
-Do not commit credentials, private paths, planning journals, caches, or
-release archives to Git. Do not rewrite pushed history or force-push. Do not
-claim GitHub features are enabled unless the API reports them. Do not build
-release artifacts from a dirty workspace; release builds read from HEAD and
-refuse uncommitted release files.
+The original RELEASE-V1.1.0 task exceeded its command budget by six
+shell-command requests. The historical budget and event ledger remain
+unchanged. Publication work continues only under RELEASE-V1.1.0-PUBLISH.
 
-The project is licensed under the Apache License 2.0; attribute changes belong
-in `NOTICE`.
+docs/architecture/CODEGRAPH.md was modified before it was included in the
+original Task Packet Allowed Paths. Its later addition was a retroactive scope
+correction and does not prove that the original scope was respected. The
+repository owner accepts the resulting documentation change as existing input
+to the new publication-only task.
 
-## Required Reading Order
+The prior 21/22 discrepancy is recorded as final Git diff 21, execution-time
+unique touched files 22, and Run Guard artifact files 12. The additional
+execution-time path was the temporary .planning/RELEASE-V1.1.0/run-guard-
+input.json bootstrap configuration, later moved outside the repository.
 
-1. `AGENTS.md`
-2. `docs/control/NEXT_CODEX_TASK.md`
-3. `docs/control/CURRENT_PROJECT_STATE.md`
-4. `docs/control/CODEX_RUNTIME_PROFILE.md`
-5. this handoff
+## Live baseline before the new task
 
-Use current source, targeted search, and tests as evidence. Planning journals
-are subordinate evidence only.
+- local feature branch: codex/release-v1.1.0
+- local candidate: 547951233e4ea2b90f18ce658cf4e4adc3c7b04a
+- remote PR branch: d1c7a2a5766d39f2e0de240d3d657b1637444677
+- local main: d1c7a2a5766d39f2e0de240d3d657b1637444677
+- origin/main: 5893027b0c57a121b8726b72b39d133b58978f04
+- v1.0.0: 643eac290b00561666692d41c55ceef546f12e15
+- v1.1.0: absent
+- PR #2: open, mergeable, blocked, review required
+- old PR checks: successful for old d1c7a2a only
 
-## Acceptance Rule
+Re-read all values after every GitHub transition. Old-commit checks cannot
+prove final-commit readiness.
 
-A sprint is accepted only when its Evidence Ledger records real validation
-results, the Task Packet scope was respected, and no forbidden action occurred.
+## Technical contracts
+
+- Release builds require a clean Git HEAD and read release files from Git
+  objects; non-Git builds require explicit unverified labeling.
+- Canonical Release artifacts come from the successful tag workflow, not from a
+  local mutable workspace or an old Release.
+- SHA256SUMS, the manifest, the publication digest, and the tagged-source
+  verifier with full validation must all pass after download.
+- git archive provides committed-tree traceability but not cross-platform ZIP
+  byte determinism.
+- Protected main/PR checks are Ubuntu, Windows, and macOS with Python 3.11,
+  3.12, and 3.13, plus CodeQL and credential scan.
+- The tag workflow runs its configured Ubuntu/Python 3.13 release-critical
+  chain and does not claim to run the full cross-platform matrix.
+- Release build-and-verify reads contents; publish alone writes contents.
+  CodeQL alone writes security events. Credential scan stays contents read.
+- CodeGraph is optional and unindexed for v1.1.0. Default missing-index
+  behavior is non-blocking; strict missing-index behavior is blocking; corrupt
+  or structurally unrecognized databases block all modes.
+- Exact Doctor, Preflight, and platform-specific pass/skip totals are
+  environment evidence and must not become fixed long-term claims.
+
+## Required sequence
+
+1. Finish only the allowed docs, workflow, and static-test correction.
+2. Run local validation and inspect the exact diff.
+3. Commit without amending 5479512.
+4. Push codex/release-v1.1.0 with bounded retries.
+5. Confirm PR #2 head equals the pushed commit and wait for final checks.
+6. Stop if reviewDecision is REVIEW_REQUIRED; report BLOCKED: independent
+   human approval required.
+7. After real approval, merge through branch protection and confirm local
+   main equals origin/main cleanly.
+8. Re-run merged-main validation, then create and push v1.1.0 exactly once.
+9. Wait for the tag workflow, download its Release assets, and independently
+   verify all canonical files with the tagged-source verifier.
+10. Clean temporary evidence and record the final Run Guard gate.
+
+Never force-push, bypass protection, self-review, move v1.0.0, upload local
+artifacts, or report an incomplete gate as publication success.

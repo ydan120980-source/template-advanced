@@ -1,197 +1,286 @@
 # NEXT_CODEX_TASK.md
 
-Task ID: `RELEASE-V1.1.0`
-Task Size: Large
+Task ID: RELEASE-V1.1.0-PUBLISH
+Task Size: Full
 Workflow Mode: Full
-Status: implementation and local validation complete; publication pending
+Status: planned; execution starts only after the new Run Guard is initialized
 
-This is a bounded public-release sprint. It promotes the verified current
-`main` line to `v1.1.0` without moving or replacing the historical `v1.0.0`
-tag or Release.
+This publication-only task supersedes the historical RELEASE-V1.1.0 task. The
+historical task remains recorded as implementation-complete but governance-
+failed; its command budget, event ledger, and scope exception are immutable.
+The released template onboarding baseline remains TEMPLATE-ONBOARDING-V1.
 
-The released template onboarding baseline remains identified as
-`TEMPLATE-ONBOARDING-V1`; this maintenance packet supersedes it only for the
-current release sprint.
+## Historical closure required before publication work
+
+The original RELEASE-V1.1.0 task has this final status:
+
+    Implementation: completed
+    Local validation: passed
+    Governance final gate: failed
+    Reason: command budget exceeded, 166/160
+    Scope compliance: PARTIAL
+    Owner exception required: YES
+    Publication: not completed
+    Superseded by: RELEASE-V1.1.0-PUBLISH
+
+The original RELEASE-V1.1.0 task exceeded its command budget by six
+shell-command requests. The historical budget and event ledger remain
+unchanged. Publication work continues only under this new task packet.
+
+docs/architecture/CODEGRAPH.md was modified before it was included in the
+original Task Packet Allowed Paths. Its later addition was a retroactive scope
+correction and does not prove that the original scope was respected. The
+repository owner accepts the resulting CodeGraph documentation change as
+existing input to this publication-only task.
+
+The earlier local implementation-review PASS is not a substitute for an
+independent GitHub human approval. The publication gate must use a review from
+another GitHub user and may not use self-review, an administrator bypass, or a
+fabricated approval.
 
 ## Goal
 
-Seal the current release contract, remove drift-prone status wording, provide a
-safe Windows Git-Bash entry point, build deterministic `v1.1.0` artifacts, and
-publish and independently verify the resulting GitHub Release.
+Correct the v1.1.0 publication evidence and release-note wording, push the
+final feature branch, verify the final commit's protected CI and Security
+checks, obtain an independent human review, merge PR #2 under branch
+protection, tag the merge result as v1.1.0, wait for the tag-triggered release
+workflow, and independently validate the canonical remote assets.
 
-## Planning Decision
+## Planning decision
 
-- Outcome impact: 5/5 — closes the public-release gap between `main` and the
-  downloadable artifacts.
-- Project value: 5/5 — makes the current trusted-source, security, and
-  process-tree contracts available to users.
-- Verification confidence: 5/5 — local, archive, CI, tag, and download checks
-  are all executable.
-- Boundary risk: 5/5 — changes public versioning, release workflow, and remote
-  GitHub state; this is intentionally a Full sprint.
-- Reversibility: 3/5 — source commits are reversible, while a published tag
-  and Release must never be moved.
-- Context completeness: 5/5 — current source, Git, GitHub, release, and
-  control-state baselines were rechecked before planning.
-- Reviewer worthiness: 5/5 — an independent review is required before the
-  final publication decision.
+- Outcome impact: 5/5 — directly closes the public v1.1.0 delivery gap.
+- Project value: 5/5 — makes the already implemented release contract
+  remotely auditable and downloadable.
+- Verification confidence: 5/5 — local checks, GitHub checks, tag workflow,
+  and downloaded-asset verification are all defined.
+- Boundary risk: 5/5 — this task crosses protected GitHub state, version tags,
+  and public Release assets; Full workflow is required.
+- Reversibility: 2/5 — source commits are recoverable, but a published tag
+  must never be moved.
+- Context completeness: 5/5 — current source, Git refs, PR metadata, Release
+  metadata, old ledger, and branch protection were rechecked.
+- Reviewer worthiness: 5/5 — independent human approval is a hard gate.
 
-Decision: implement with independent reviewer evidence. CodeGraph remains an
-optional capability: its absence must not block the default release gate, and
-no indexing success may be claimed.
+Decision: implement the bounded publication correction with a new Run Guard,
+independent GitHub human review, and fail-fast remote gates. CodeGraph remains
+optional and unindexed; no project-level indexing is part of this task.
+
+## Live bootstrap baseline
+
+These values were rechecked before this packet was created and are evidence,
+not assumptions for later stages:
+
+    local branch: codex/release-v1.1.0
+    local HEAD: 547951233e4ea2b90f18ce658cf4e4adc3c7b04
+    origin/codex/release-v1.1.0: d1c7a2a5766d39f2e0de240d3d657b1637444677
+    local main: d1c7a2a5766d39f2e0de240d3d657b1637444677
+    origin/main: 5893027b0c57a121b8726b72b39d133b58978f04
+    v1.0.0: 643eac290b00561666692d41c55ceef546f12e15
+    v1.1.0: absent
+    PR: #2, open, mergeable but blocked, review required
+    PR head checks: green for the old d1c7a2a head only
+
+The final branch commit and all remote results must be re-read after each
+remote transition. Old d1c7a2a checks must never be used as evidence for
+5479512 or a later commit.
 
 ## Allowed Paths
 
-- `.github/workflows/release-artifacts.yml`
-- `CHANGELOG.md`
-- `CONTRIBUTING.md`
-- `README.md`
-- `SECURITY.md`
-- `docs/ai-workflow/GITHUB_RELEASE_READINESS.md`
-- `docs/architecture/README.md`
-- `docs/architecture/CODEGRAPH.md`
-- `docs/control/NEXT_CODEX_TASK.md`
-- `docs/control/CURRENT_PROJECT_STATE.md`
-- `docs/control/CHATGPT_HANDOFF.md`
-- `docs/control/SPRINT_LEDGER.md`
-- `scripts/build-release.py`
-- `scripts/integration-test-release.sh`
-- `scripts/verify-release-archive.py`
-- `scripts/invoke-git-bash.ps1`
-- `tools/project_version.py`
-- `tools/template_doctor/**`
-- `tools/aiwf_run_guard/__init__.py`
-- `tests/release_readiness/**`
-- `tests/template_doctor/**`
-- An isolated Run Guard plan directory outside the repository root (local
-  evidence only; never commit or publish)
+Only these repository paths may change in this task:
 
-## Forbidden Paths And Actions
+- .github/workflows/release-artifacts.yml
+- .github/workflows/security.yml
+- CHANGELOG.md
+- README.md
+- docs/ai-workflow/GITHUB_RELEASE_READINESS.md
+- docs/architecture/CODEGRAPH.md
+- docs/control/NEXT_CODEX_TASK.md
+- docs/control/CURRENT_PROJECT_STATE.md
+- docs/control/CHATGPT_HANDOFF.md
+- docs/control/SPRINT_LEDGER.md
+- tests/release_readiness/**
+- An isolated Run Guard plan directory outside the repository root, used only
+  for local evidence and never committed or published
 
-- `.git/**`, `dist/**`, `release-a/**`, `release-b/**`, caches, temporary
-  directories, and local runtime state in the commit or Release assets;
-- `.claude/settings.local.json`, credentials, private paths, or secrets;
-- dependency manifests and unrelated core-governance refactors;
-- moving, replacing, or force-pushing `v1.0.0`;
-- rewriting Git history, squashing the ten post-`v1.0.0` commits, or amending
-  existing commits;
-- compressing the mutable working directory for source delivery;
-- claiming real CodeGraph indexing, official schema validation, or host-level
-  pass/skip counts as repository invariants;
-- creating a tag or Release before the final commit is pushed and the required
-  GitHub workflows have succeeded;
-- uploading local release artifacts in place of tag-CI artifacts;
-- continuing after a failed required validation or a remote publication error.
+The external GitHub state touched by this task is limited to the existing PR
+#2, its feature branch, the protected main merge, the new v1.1.0 tag, and the
+tag-triggered Release workflow.
+
+## Forbidden Paths and Actions
+
+- .git/**, .claude/settings.local.json, credentials, secrets, private paths,
+  dist/, release-a/, release-b/, __pycache__/, *.pyc, *.pyo, .planning/, and
+  temporary build/download directories in the repository;
+- changing dependency manifests, product code, Release builder design,
+  Doctor/Run Guard core logic, CI matrix dimensions, or unrelated documents;
+- changing the historical 160 command budget, deleting old Run Guard events,
+  fabricating a lower command count, or changing the old gate to PASS;
+- amend, rebase, history rewrite, force-push, protected-branch bypass, or
+  moving/replacing v1.0.0;
+- self-review, administrator bypass, review deletion, or fabricated
+  independent approval;
+- creating v1.1.0 before the merged main commit and all required checks are
+  confirmed;
+- uploading local artifacts instead of the successful tag workflow artifacts;
+- continuing after a stop condition, unbounded network retry, or new budget
+  overrun.
 
 ## Budget
 
-- Maximum files changed: 32
-- Maximum shell-command requests: 160 across the main and reviewer sources
+- Maximum changed repository files: 12
+- Maximum shell-command requests: 100 across the single declared main source
 - Retry limit: 2
-- Unique published delivery files: 12; local planning and temporary validation
-  output do not count as release files.
+- Unique Run Guard artifact-file budget: 12
+- Reserve: two file slots and ten shell-command requests remain unallocated
+  until a concrete validation need appears
+
+The task packet itself counts as one changed repository file. Local Run Guard
+JSONL evidence and temporary validation output do not count as published
+Release files.
 
 ## Run Guard
 
-Classification: `required`.
+Classification: required.
 
-Use an isolated Run Guard plan directory outside the repository root. The
-normalized run configuration must declare:
+Initialize a new isolated plan directory outside the repository before the
+first implementation edit. The normalized configuration must use task ID
+RELEASE-V1.1.0-PUBLISH, retry limit 2, required validation, required review,
+non-overlapping implementation/publication/review workstreams, a 100-request
+shell-command budget, and a 12-file unique-artifact budget.
 
-- retry limit: 2;
-- required validation: true;
-- required independent review: true;
-- non-overlapping implementation, integration/publication, and reviewer
-  workstreams;
-- command budget: 160 `shell_command_requests`, with sources `main` and
-  `reviewer`, plus reserve for one bounded retry;
-- unique delivery-file budget: 12 published files, excluding local planning
-  evidence and temporary validation output.
+The command source is main. The independent GitHub human review is remote
+evidence rather than a second Codex shell session; it must be recorded only
+after GitHub reports an actual approval. Do not reuse or amend the old
+RELEASE-V1.1.0 Run Guard plan.
 
-Record workstream starts, changed-file artifacts, validation, handoff, reviewer
-result, and the final gate. Do not backfill evidence for commands that ran
-before this task packet was initialized; label the preflight and baseline as
-bootstrap evidence in the ledger.
+Record bootstrap evidence separately for actions taken before initialization.
+Record workstream starts, changed-file artifacts, the implementation handoff,
+validation, remote review evidence, publication milestones, and the final
+gate. The final gate must be PASS only when every required remote and local
+condition is evidenced.
 
-## Required Changes
+## Required changes before the final push
 
-1. Make `tools/project_version.py` the single project version source and set it
-   to `1.1.0`; derive package versions, release inventory, builder defaults,
-   integration stems, workflow artifact names, and tests from it.
-2. Seal `CHANGELOG.md` as `[1.1.0] - 2026-08-02` (or the actual release date),
-   retain an empty `[Unreleased]` entry point, and add the `v1.0.0...v1.1.0`
-   comparison link. Do not claim CodeGraph indexing.
-3. Update README, CONTRIBUTING, SECURITY, release-readiness, architecture, and
-   control-state wording to avoid fixed host-dependent file/test/Doctor counts,
-   distinguish default/strict Doctor semantics, and distinguish Git source
-   archives from deterministic Release archives.
-4. Add a tested `scripts/invoke-git-bash.ps1` helper that derives Git Bash from
-   `git.exe`, excludes WSL/System32 and WindowsApps launchers, handles spaces,
-   forwards stdout/stderr and exit codes, and fails clearly when Git Bash is
-   unavailable.
-5. Update the release workflow and release scripts/tests for `v1.1.0` without
-   weakening the clean-HEAD, deterministic archive, manifest, digest, full
-   `--validate`, CodeGraph rejection, or CI/security contracts.
-6. Append the accepted release sprint evidence to the control ledger and leave
-   current state/handoff aligned with the final published commit and remote
-   verification. The current checkpoint has passed implementation review and
-   local validation; publication remains blocked until the required remote
-   checks and tag workflow succeed.
+1. Append an immutable historical closure for RELEASE-V1.1.0 to the Sprint
+   Ledger. Preserve 166/160, retry 2/2, artifact 12/12, the failed gate, the
+   partial scope compliance, the owner exception, and the retroactive
+   CodeGraph-path correction.
+2. Correct Release Notes and durable publication guidance:
+   - protected main/PR checks: Ubuntu, Windows, and macOS x Python 3.11,
+     3.12, and 3.13, plus CodeQL and credential scan;
+   - tag workflow: its configured Ubuntu/Python 3.13 release-critical chain
+     (unit tests, Verify, Eval, Release integration, deterministic build,
+     archive verification, and upload);
+   - do not claim that a tag push reruns the full cross-platform matrix;
+   - exact Doctor, Preflight, and platform skip counts depend on the host and
+     optional capabilities and are not repository invariants.
+3. Keep CodeGraph wording honest:
+   optional maintainer capability; no real project-level v1.1.0 index claimed;
+   absent index is non-blocking in default Doctor and blocking in strict mode;
+   present but corrupt or structurally unrecognized databases are blocking in
+   all modes.
+4. Explain the file-count discrepancy as:
+   final Git diff = 21 tracked files; execution-time unique touched files =
+   22 because the Run Guard bootstrap configuration was temporarily created
+   under .planning/RELEASE-V1.1.0/run-guard-input.json and then moved outside
+   the repository; artifact-file count = 12. If current evidence contradicts
+   this explanation, record the evidence and correct the Ledger.
+5. Tighten GitHub Actions permissions within this scope:
+   release build-and-verify reads contents, release publish alone writes
+   contents (and reads workflow artifacts if required), CodeQL alone writes
+   security events, and credential scan uses contents read.
+6. Add or update a static release-notes contract test so an inaccurate
+   full-matrix tag claim fails locally.
 
-## Validation Commands
+## Validation
 
-Run fail-fast from the repository root; on Windows use the new PowerShell
-helper where a Bash script is required:
+Run fail-fast from the repository root. Every native command in a PowerShell
+batch must be checked immediately for its own exit code.
 
-```text
-py -3 -B -m unittest discover -s tests
-powershell -NoProfile -File scripts/invoke-git-bash.ps1 scripts/setup.sh
-powershell -NoProfile -File scripts/invoke-git-bash.ps1 scripts/verify.sh
-powershell -NoProfile -File scripts/invoke-git-bash.ps1 evals/run-evals.sh
-py -3 -B -m tools.template_doctor --root . --format json
-py -3 -B scripts/ci-doctor-gate.py --root .
-powershell -NoProfile -File scripts/invoke-git-bash.ps1 scripts/integration-test-release.sh
-py -3 -B scripts/build-release.py --out-dir release-a
-py -3 -B scripts/build-release.py --out-dir release-b
-py -3 -B scripts/verify-release-archive.py --archive release-a/template-advanced-1.1.0.zip --manifest release-a/template-advanced-1.1.0.manifest.json --validate
-git archive --format=zip --output=template-advanced-source-v1.1.0.zip HEAD
-```
+    py -3 -B -m unittest discover -s tests
+    powershell -NoProfile -File scripts/invoke-git-bash.ps1 scripts/verify.sh
+    powershell -NoProfile -File scripts/invoke-git-bash.ps1 evals/run-evals.sh
+    py -3 -B -m tools.template_doctor --root . --format json
+    py -3 -B scripts/ci-doctor-gate.py --root .
+    powershell -NoProfile -File scripts/invoke-git-bash.ps1 scripts/integration-test-release.sh
+    git diff --check
+    git diff --name-only origin/main...HEAD
+    git diff --name-only origin/main...HEAD | Sort-Object -Unique
 
-Before publication, verify both build directories and the source archive are
-outside the committed tree or removed, and inspect source type/commit,
-publication digest, file set, modes, line endings, `.git/`,
-`.claude/settings.local.json`, caches, and local state.
+The local release integration must retain double-build determinism, clean-HEAD
+rebuild equality, full archive --validate, corrupted CodeGraph rejection,
+bounded process-tree cleanup, and temporary-directory cleanup. No local
+artifact may be committed or uploaded.
 
-After the final commit:
+## Remote publication sequence
 
-```text
-git push origin main
-gh run list --branch main --limit 20
-gh run view <ci-run-id>
-gh run view <security-run-id>
-git tag -a v1.1.0 -m "template-advanced v1.1.0"
-git push origin v1.1.0
-gh release view v1.1.0
-gh release download v1.1.0 --dir <temporary-directory>
-```
+1. Review the exact diff, scope, permissions, and release-note test; commit
+   without amending 5479512.
+2. Push only codex/release-v1.1.0. Use at most three bounded network rounds
+   for a push failure and stop on persistent failure.
+3. Confirm PR #2 headRefOid equals the final pushed commit. Wait for the
+   final-commit CI and Security checks; old-commit results do not count.
+4. Confirm an independent GitHub human review reports APPROVED. If it reports
+   REVIEW_REQUIRED, stop with BLOCKED: independent human approval required.
+5. Merge PR #2 only through the repository's protected method. Fetch and
+   fast-forward local main to origin/main; record the merge/main SHA.
+6. Re-run the required local validation on the merged main. Only a clean,
+   fully validated merged main may receive a tag.
+7. Confirm v1.1.0 is absent, create an annotated tag on the merged main SHA,
+   push it once, and confirm the remote tag. Never touch v1.0.0.
+8. Find the release-artifacts tag run for v1.1.0 and the merged SHA. Require
+   success for build-and-verify and publish, a non-draft/non-prerelease
+   Release, and the four canonical assets.
+9. Download the Release assets to an external temporary directory. Verify
+   SHA256SUMS, manifest version/source commit/file count, publication digest,
+   and the tagged-source verifier with --validate. Generate a source archive
+   with git archive v1.1.0 and verify its committed-tree hygiene; do not treat
+   its ZIP bytes as deterministic Release bytes.
+10. Clean all task temporary directories and confirm a clean repository.
 
-The tag workflow must succeed before the Release is accepted. Downloaded
-assets must pass `sha256sum -c SHA256SUMS` and the `v1.1.0` verifier with
-`--validate` using the tagged source.
+## Stop conditions
 
-## Stop Conditions
+Stop all later publication actions on any of the following:
 
-Stop and report immediately on a failed required validation, dirty or
-untracked release source, missing Git Bash, unexpected workflow failure,
-unavailable GitHub permission, tag/HEAD mismatch, asset checksum mismatch,
-CodeGraph claim that cannot be evidenced, forbidden-path change, or any need
-to move `v1.0.0`.
+- final commit cannot be pushed, or the remote branch does not equal it;
+- final-commit CI or Security fails, is incomplete, or cannot be identified;
+- independent human review is missing or not APPROVED;
+- PR protection blocks merge, merge SHA cannot be confirmed, or local main
+  cannot equal origin/main cleanly;
+- v1.1.0 already exists and is absent or points to another commit;
+- merged-main validation fails;
+- tag workflow fails or canonical assets cannot be identified;
+- downloaded checksum, manifest, digest, or tagged-source validation fails;
+- a forbidden path changes, a real CodeGraph claim is needed, or a budget is
+  exceeded.
 
-## Required Return Format
+Failure wording must distinguish:
 
-Return an Evidence Ledger with the version decision, changed files, exact local
-and remote commands/results, final/main/tag/v1.0.0 SHAs, workflow run IDs and
-URLs, artifact sizes/SHA-256/publication digest, Release metadata, independent
-download verification, scope check, remaining risks, Run Guard gate, and one
-follow-up candidate. Do not report publication as complete before remote CI and
-download verification are successful.
+    BLOCKED: network unavailable
+    FAIL: final PR head checks failed
+    BLOCKED: independent human approval required
+
+Do not report publication complete after any stop condition.
+
+## Required return format
+
+Return an Evidence Ledger containing:
+
+- old task closure table with 160, 166, failed gate, PARTIAL scope, YES owner
+  exception, and preserved historical evidence;
+- new task ID, packet commit, file/retry/command budgets, actual usage, and
+  final Run Guard gate;
+- feature branch, final branch SHA, remote branch SHA, PR URL/review/merge
+  state, merge SHA, and final main SHA;
+- only final-commit or merged-commit CI/Security checks, run IDs, results, and
+  URLs;
+- v1.0.0 SHA, v1.1.0 tag SHA, Release URL and metadata;
+- remote asset sizes, SHA-256 values, checksum result, publication digest,
+  manifest source commit, and tagged-source --validate result;
+- source archive hygiene result;
+- files added/modified/deleted, environment-specific Windows/Linux/macOS
+  validation, scope check, remaining risks, and one bounded next step.
+
+The final status must separate old-task governance failure from new-task
+publication status. A missing human review, network, CI, merge, tag workflow,
+or remote asset proof is BLOCKED or FAIL, never PASS.

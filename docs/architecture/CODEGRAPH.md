@@ -6,7 +6,7 @@ use Template Doctor or Run Guard.
 
 ## Current Status
 
-`CodeGraph configuration prepared; no real v1.1.0 indexing was performed because the required tool was unavailable in the release environment.`
+`CodeGraph is an optional maintainer capability; no real project-level CodeGraph index is claimed for v1.1.0 because the required tool was unavailable in the release environment.`
 
 No CodeGraph CLI or Codex CodeGraph tool was available in the release
 environment, so no index was created and no index was committed. This
@@ -24,6 +24,8 @@ repository intentionally does not fabricate an initialization marker.
   complete or official CodeGraph schema.
 - `--strict` promotes the absent index to a blocking `fail`; use it when the
   index is a hard requirement for a release or handoff.
+- A present but corrupt or structurally unrecognized database is blocking in
+  both default and strict modes.
 - The CI gate (`scripts/ci-doctor-gate.py`) has no CodeGraph allowlist entry:
   the default non-blocking skip means an absent index never blocks normal CI.
 - `.gitignore` excludes `.codegraph/`, so any future index database stays out

@@ -100,6 +100,28 @@ contain `.git/`, ignored files, untracked files, and local tool state. Use
 release artifacts. This is distinct from the formal release archive generated
 by `scripts/build-release.py`.
 
+## Protected checks and tag workflow
+
+The protected main-branch and pull-request checks are the cross-platform
+matrix: Ubuntu, Windows, and macOS with Python 3.11, 3.12, and 3.13, plus
+CodeQL and credential scanning. These checks must pass on the exact commit
+that will be merged before a release tag is created.
+
+The tag-triggered release-artifacts workflow is a separate release-critical
+chain on its configured Ubuntu/Python 3.13 runner. It runs unit tests, Verify,
+Eval, Release integration, deterministic artifact construction, archive
+validation, workflow-artifact checksum validation, and GitHub Release upload.
+It does not claim to rerun the full protected cross-platform matrix.
+
+Workflow permissions are job-scoped: release build-and-verify reads contents,
+the publish job alone writes contents and reads the workflow artifact, CodeQL
+alone writes security events, and credential scanning uses contents read.
+
+Exact Template Doctor, Run Guard preflight, and platform-specific pass/skip
+totals depend on optional host capabilities and the operating system. The
+release gate is no blocking failure plus successful required checks, not a
+fixed numeric total.
+
 ## Owner Decisions
 
 The template itself has completed these decisions:
