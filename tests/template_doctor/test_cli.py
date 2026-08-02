@@ -12,34 +12,84 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from tools.template_doctor.engine import MAX_WORKERS, run_checks
 from tools.template_doctor.models import CheckResult
+from tools.template_doctor.rules import _state_freshness
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+DOCTOR_TIMEOUT_SECONDS = 30
+GIT_TIMEOUT_SECONDS = 15
+MAX_DIAGNOSTIC_CHARS = 4000
 
 
-def run_doctor(root: Path, report_format: str = "json") -> subprocess.CompletedProcess[str]:
+def _diagnostic_tail(value: object) -> str:
+    if value is None:
+        return "<none>"
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    return str(value)[-MAX_DIAGNOSTIC_CHARS:]
+
+
+def _run_bounded(
+    helper_name: str,
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout: int,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        kwargs: dict[str, object] = {
+            "cwd": cwd,
+            "check": False,
+            "capture_output": True,
+            "text": True,
+            "encoding": "utf-8",
+            "timeout": timeout,
+        }
+        if env is not None:
+            kwargs["env"] = env
+        return subprocess.run(command, **kwargs)
+    except subprocess.TimeoutExpired as error:
+        stdout = getattr(error, "stdout", None) or getattr(error, "output", None)
+        raise RuntimeError(
+            f"{helper_name} timed out after {timeout} seconds.\n"
+            f"command: {command!r}\n"
+            f"cwd: {cwd}\n"
+            f"stdout tail: {_diagnostic_tail(stdout)}\n"
+            f"stderr tail: {_diagnostic_tail(getattr(error, 'stderr', None))}"
+        ) from error
+
+
+def run_doctor(
+    root: Path,
+    report_format: str = "json",
+    *,
+    strict: bool = False,
+) -> subprocess.CompletedProcess[str]:
     """Run the public module entry point without depending on implementation details."""
 
-    return subprocess.run(
-        [
-            sys.executable,
-            "-B",
-            "-m",
-            "tools.template_doctor",
-            "--root",
-            str(root),
-            "--format",
-            report_format,
-        ],
+    command = [
+        sys.executable,
+        "-B",
+        "-m",
+        "tools.template_doctor",
+        "--root",
+        str(root),
+        "--format",
+        report_format,
+    ]
+    if strict:
+        command.append("--strict")
+    return _run_bounded(
+        "run_doctor",
+        command,
         cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
+        timeout=DOCTOR_TIMEOUT_SECONDS,
     )
 
 
@@ -54,12 +104,11 @@ def _run_git(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
             "GIT_TERMINAL_PROMPT": "0",
         }
     )
-    return subprocess.run(
+    return _run_bounded(
+        "_run_git",
         ["git", "-C", str(root), *arguments],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
+        cwd=REPO_ROOT,
+        timeout=GIT_TIMEOUT_SECONDS,
         env=environment,
     )
 
@@ -134,6 +183,84 @@ def materialize_ready_fixture(destination: Path) -> Path:
 class TemplateDoctorCliTests(unittest.TestCase):
     maxDiff = None
 
+    def test_run_doctor_helper_completes_with_timeout(self) -> None:
+        expected = subprocess.CompletedProcess(
+            args=["doctor"],
+            returncode=0,
+            stdout="{}",
+            stderr="",
+        )
+        with patch.object(subprocess, "run", return_value=expected) as mocked:
+            completed = run_doctor(FIXTURES / "ready")
+
+        self.assertIs(completed, expected)
+        self.assertEqual(mocked.call_args.kwargs["timeout"], DOCTOR_TIMEOUT_SECONDS)
+
+    def test_run_git_helper_completes_with_timeout(self) -> None:
+        expected = subprocess.CompletedProcess(
+            args=["git"],
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+        with patch.object(subprocess, "run", return_value=expected) as mocked:
+            completed = _run_git(FIXTURES / "ready", "status")
+
+        self.assertIs(completed, expected)
+        self.assertEqual(mocked.call_args.kwargs["timeout"], GIT_TIMEOUT_SECONDS)
+
+    def test_run_doctor_timeout_reports_bounded_diagnostics(self) -> None:
+        timeout = subprocess.TimeoutExpired(
+            ["python", "-m", "tools.template_doctor"],
+            DOCTOR_TIMEOUT_SECONDS,
+            output="doctor stdout",
+            stderr="doctor stderr",
+        )
+        with patch.object(subprocess, "run", side_effect=timeout):
+            with self.assertRaises(RuntimeError) as context:
+                run_doctor(FIXTURES / "ready")
+
+        message = str(context.exception)
+        self.assertIn("run_doctor timed out after 30 seconds", message)
+        self.assertIn("tools.template_doctor", message)
+        self.assertIn(str(REPO_ROOT), message)
+        self.assertIn("doctor stdout", message)
+        self.assertIn("doctor stderr", message)
+
+    def test_run_git_timeout_reports_bounded_diagnostics(self) -> None:
+        timeout = subprocess.TimeoutExpired(
+            ["git", "status"],
+            GIT_TIMEOUT_SECONDS,
+            output="git stdout",
+            stderr="git stderr",
+        )
+        with patch.object(subprocess, "run", side_effect=timeout):
+            with self.assertRaises(RuntimeError) as context:
+                _run_git(FIXTURES / "ready", "status")
+
+        message = str(context.exception)
+        self.assertIn("_run_git timed out after 15 seconds", message)
+        self.assertIn("git", message)
+        self.assertIn(str(REPO_ROOT), message)
+        self.assertIn("git stdout", message)
+        self.assertIn("git stderr", message)
+
+    def test_timeout_diagnostics_are_bounded(self) -> None:
+        long_output = "x" * (MAX_DIAGNOSTIC_CHARS + 100)
+        timeout = subprocess.TimeoutExpired(
+            ["git", "status"],
+            GIT_TIMEOUT_SECONDS,
+            output=long_output,
+            stderr=long_output,
+        )
+        with patch.object(subprocess, "run", side_effect=timeout):
+            with self.assertRaises(RuntimeError) as context:
+                _run_git(FIXTURES / "ready", "status")
+
+        message = str(context.exception)
+        self.assertNotIn("x" * (MAX_DIAGNOSTIC_CHARS + 1), message)
+        self.assertIn("x" * MAX_DIAGNOSTIC_CHARS, message)
+
     def test_ready_fixture_returns_zero_and_complete_json_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
@@ -182,24 +309,7 @@ class TemplateDoctorCliTests(unittest.TestCase):
             ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
             shutil.rmtree(ready / ".codegraph")
             completed = run_doctor(ready)
-            strict_completed = subprocess.run(
-                [
-                    sys.executable,
-                    "-B",
-                    "-m",
-                    "tools.template_doctor",
-                    "--root",
-                    str(ready),
-                    "--format",
-                    "json",
-                    "--strict",
-                ],
-                cwd=REPO_ROOT,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            )
+            strict_completed = run_doctor(ready, strict=True)
 
         self.assertEqual(strict_completed.returncode, 1, strict_completed.stderr)
         strict_report = json.loads(strict_completed.stdout)
@@ -236,24 +346,7 @@ class TemplateDoctorCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             ready = materialize_ready_fixture(Path(temporary_directory) / "ready")
             (ready / ".codegraph" / "index.db").write_bytes(b"not a sqlite database")
-            strict_completed = subprocess.run(
-                [
-                    sys.executable,
-                    "-B",
-                    "-m",
-                    "tools.template_doctor",
-                    "--root",
-                    str(ready),
-                    "--format",
-                    "json",
-                    "--strict",
-                ],
-                cwd=REPO_ROOT,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            )
+            strict_completed = run_doctor(ready, strict=True)
 
         self.assertEqual(strict_completed.returncode, 1, strict_completed.stderr)
         strict_report = json.loads(strict_completed.stdout)
@@ -441,6 +534,32 @@ class TemplateDoctorCliTests(unittest.TestCase):
             if item["rule_id"] == "control.current_state_freshness"
         )
         self.assertEqual(finding["status"], "pass")
+
+    def test_stop_state_schema_does_not_require_legacy_head_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            isolated_root = Path(temporary_directory) / "stop_state"
+            materialize_ready_fixture(isolated_root)
+            state_path = (
+                isolated_root / "docs" / "control" / "CURRENT_PROJECT_STATE.md"
+            )
+            state_path.write_text(
+                "# CURRENT_PROJECT_STATE.md\n\n"
+                "Last Updated: 2026-08-02\n"
+                "State Based On Parent Commit: parent\n"
+                "Last Confirmed Remote PR Head: remote\n"
+                "Local Stop-State Commit: local\n"
+                "Live Local HEAD: must be resolved with git rev-parse HEAD\n"
+                "Live Remote PR Head: must be refreshed from GitHub\n\n"
+                "Repository state record:\n"
+                "current for the documented stop condition\n\n"
+                "Remote state:\n"
+                "must be refreshed live before every remote transition\n",
+                encoding="utf-8",
+            )
+            result = _state_freshness(isolated_root)
+
+        self.assertEqual(result.status, "pass")
+        self.assertIn("stop-state schema", result.evidence)
 
     def test_placeholder_fixture_returns_one_and_reports_findings(self) -> None:
         completed = run_doctor(FIXTURES / "placeholder")
@@ -893,7 +1012,8 @@ class TemplateDoctorCliTests(unittest.TestCase):
         self.assertEqual(rule_ids, sorted(rule_ids))
 
     def test_argparse_rejects_unsupported_format_with_exit_two(self) -> None:
-        completed = subprocess.run(
+        completed = _run_bounded(
+            "run_doctor",
             [
                 sys.executable,
                 "-B",
@@ -905,10 +1025,7 @@ class TemplateDoctorCliTests(unittest.TestCase):
                 "xml",
             ],
             cwd=REPO_ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
+            timeout=DOCTOR_TIMEOUT_SECONDS,
         )
 
         self.assertEqual(completed.returncode, 2)

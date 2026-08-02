@@ -261,12 +261,29 @@ def _state_freshness(root: Path) -> CheckResult:
             date.fromisoformat(match.group(1))
         except ValueError:
             problems.append("valid Last Updated date")
-    if not stale:
-        problems.append("explicit Is state stale? flag")
-    elif stale.group(1).lower() != "no":
-        problems.append("Is state stale? must be no")
     if _placeholder_labels(text):
         problems.append("placeholder-free state")
+
+    stop_state_schema = all(
+        re.search(pattern, text)
+        for pattern in (
+            r"(?im)^Repository state record:\s*\ncurrent for the documented stop condition\s*$",
+            r"(?im)^Remote state:\s*\nmust be refreshed live before every remote transition\s*$",
+            r"(?im)^State Based On Parent Commit:\s*\S.*$",
+            r"(?im)^Last Confirmed Remote PR Head:\s*\S.*$",
+            r"(?im)^Local Stop-State Commit:\s*\S.*$",
+            r"(?im)^Live Local HEAD:\s*\S.*$",
+            r"(?im)^Live Remote PR Head:\s*\S.*$",
+        )
+    )
+    if stop_state_schema:
+        schema_name = "stop-state"
+    else:
+        schema_name = "legacy"
+        if not stale:
+            problems.append("explicit Is state stale? flag")
+        elif stale.group(1).lower() != "no":
+            problems.append("Is state stale? must be no")
     based_on = re.search(
         r"(?im)^(?:[-*]\s*\*\*)?Based On Commit(?:\*\*)?:\s*(\S.*?)\s*$",
         text,
@@ -275,12 +292,14 @@ def _state_freshness(root: Path) -> CheckResult:
         r"(?im)^(?:[-*]\s*\*\*)?Current Git HEAD(?:\*\*)?:\s*(\S.*?)\s*$",
         text,
     )
-    if not based_on or not recorded_head:
+    actual_head = _git_head_commit(root)
+    based_value = ""
+    head_value = ""
+    if not stop_state_schema and (not based_on or not recorded_head):
         problems.append("Based On Commit and Current Git HEAD fields")
-    else:
+    elif not stop_state_schema:
         based_value = based_on.group(1).strip()
         head_value = recorded_head.group(1).strip()
-        actual_head = _git_head_commit(root)
         if actual_head and (
             re.fullmatch(r"[0-9a-f]{40,64}", based_value)
             or re.fullmatch(r"[0-9a-f]{40,64}", head_value)
@@ -305,7 +324,7 @@ def _state_freshness(root: Path) -> CheckResult:
         rule_id,
         status="pass",
         evidence=(
-            f"State date {match.group(1)} is valid, explicitly not stale"
+            f"State date {match.group(1)} is valid with {schema_name} schema"
             + (
                 ", and matches current Git HEAD."
                 if actual_head
