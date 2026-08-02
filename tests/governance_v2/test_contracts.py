@@ -33,6 +33,18 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             TaskContract.from_dict(tampered)
 
+    def test_contract_paths_cannot_escape_repository_root(self) -> None:
+        for key in ("allowed_paths", "forbidden_paths"):
+            for invalid in ("../outside", "/absolute/path", "C:\\outside\\file", "https://example.invalid/path"):
+                with self.subTest(key=key, invalid=invalid):
+                    tampered = dict(self.raw)
+                    tampered[key] = [invalid]
+                    tampered["contract_digest"] = sha256_canonical(
+                        {field: value for field, value in tampered.items() if field != "contract_digest"}
+                    )
+                    with self.assertRaises(ContractError):
+                        TaskContract.from_dict(tampered)
+
     def test_issue_body_contract_extraction(self) -> None:
         body = "prefix\n```json\n" + json.dumps(self.raw) + "\n```\nsuffix"
         self.assertEqual(extract_contract(body)["task_id"], "GOV-V2-BOOTSTRAP")
@@ -61,6 +73,21 @@ class ContractTests(unittest.TestCase):
         valid = verify_event_chain([first, second])
         self.assertEqual(valid["status"], "PASS")
         self.assertEqual(valid["chain_head"], second.event_digest)
+
+        changed_subject = TaskEvent.create(
+            sequence=2,
+            event_type="decision_recorded",
+            task_id=first.task_id,
+            subject_sha="f" * 40,
+            previous_event_digest=first.event_digest,
+            payload={"decision": "different-subject"},
+            actor="ydan120980-source",
+            created_at="2026-08-02T14:01:30Z",
+        )
+        self.assertEqual(
+            verify_event_chain([first, changed_subject])["code"],
+            "EVENT_SUBJECT_SHA_MISMATCH",
+        )
 
         fork = TaskEvent.create(
             sequence=2,

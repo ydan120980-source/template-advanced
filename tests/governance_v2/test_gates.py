@@ -113,10 +113,38 @@ class GateTests(unittest.TestCase):
                 app_id=42,
                 fixture=inactive_fixture,
             )
+            missing_run_fixture = Path(temp_dir) / "missing-run-field.json"
+            missing_run_payload = json.loads(fixture.read_text(encoding="utf-8"))
+            del missing_run_payload["workflow_runs"][0]["path"]
+            missing_run_fixture.write_text(json.dumps(missing_run_payload), encoding="utf-8")
+            missing_run = gate_github(
+                repo="owner/repo",
+                sha=SHA,
+                workflow="release-candidate.yml",
+                check_name="release-candidate",
+                app_id=42,
+                fixture=missing_run_fixture,
+            )
+            missing_check_fixture = Path(temp_dir) / "missing-check-field.json"
+            missing_check_payload = json.loads(fixture.read_text(encoding="utf-8"))
+            del missing_check_payload["check_runs"][0]["head_sha"]
+            missing_check_fixture.write_text(json.dumps(missing_check_payload), encoding="utf-8")
+            missing_check = gate_github(
+                repo="owner/repo",
+                sha=SHA,
+                workflow="release-candidate.yml",
+                check_name="release-candidate",
+                app_id=42,
+                fixture=missing_check_fixture,
+            )
         self.assertEqual(passed["status"], "PASS")
         self.assertFalse(passed["remote_writes"])
         self.assertEqual(blocked["code"], "CHECK_APP_MISMATCH")
         self.assertEqual(inactive["code"], "WORKFLOW_NOT_ACTIVE")
+        self.assertEqual(missing_run["status"], "BLOCKED")
+        self.assertEqual(missing_run["code"], "WORKFLOW_RUN_RESPONSE_INCOMPLETE")
+        self.assertEqual(missing_check["status"], "BLOCKED")
+        self.assertEqual(missing_check["code"], "CHECK_RESPONSE_INCOMPLETE")
 
 
 if __name__ == "__main__":

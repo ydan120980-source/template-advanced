@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from .canonical import sha256_canonical, without_field
@@ -85,6 +86,22 @@ def _require_string_list(raw: dict[str, Any], key: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _require_repository_relative_paths(raw: dict[str, Any], key: str) -> tuple[str, ...]:
+    values = _require_string_list(raw, key)
+    for value in values:
+        normalized = value.replace("\\", "/")
+        if (
+            normalized.startswith("/")
+            or re.match(r"^[A-Za-z]:($|/)", normalized)
+            or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", normalized)
+            or any(part == ".." for part in normalized.split("/"))
+        ):
+            raise ContractError(
+                f"{key} must contain repository-relative paths without absolute prefixes or parent traversal"
+            )
+    return values
+
+
 @dataclass(frozen=True, slots=True)
 class TaskContract:
     """A frozen governance.task/v2 contract."""
@@ -104,8 +121,9 @@ class TaskContract:
             raise ContractError(f"unsupported schema_version: {schema_version}")
         for key in ("task_id", "task_type", "repository_id", "base_sha", "goal"):
             _require_string(raw, key)
-        for key in ("allowed_paths", "forbidden_paths", "acceptance"):
-            _require_string_list(raw, key)
+        for key in ("allowed_paths", "forbidden_paths"):
+            _require_repository_relative_paths(raw, key)
+        _require_string_list(raw, "acceptance")
         digest = _require_string(raw, "contract_digest")
         expected = sha256_canonical(without_field(raw, "contract_digest"))
         if digest != expected:

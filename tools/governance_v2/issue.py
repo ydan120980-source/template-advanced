@@ -344,12 +344,20 @@ def verify_event_chain(events: Iterable[dict[str, Any] | TaskEvent]) -> dict[str
     expected_sequence = 1
     previous_digest: str | None = None
     task_id = parsed[0].task_id
+    subject_sha = parsed[0].subject_sha
     for event in parsed:
         if event.sequence != expected_sequence:
             code = "EVENT_CHAIN_GAP" if event.sequence > expected_sequence else "EVENT_CHAIN_OUT_OF_ORDER"
             return {"status": "FAIL", "code": code, "events": len(parsed), "sequence": event.sequence}
         if event.task_id != task_id:
             return {"status": "FAIL", "code": "EVENT_TASK_MISMATCH", "events": len(parsed), "sequence": event.sequence}
+        if event.subject_sha != subject_sha:
+            return {
+                "status": "FAIL",
+                "code": "EVENT_SUBJECT_SHA_MISMATCH",
+                "events": len(parsed),
+                "sequence": event.sequence,
+            }
         if event.previous_event_digest != previous_digest:
             return {"status": "FAIL", "code": "EVENT_PREVIOUS_DIGEST_MISMATCH", "events": len(parsed), "sequence": event.sequence}
         previous_digest = event.event_digest

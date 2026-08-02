@@ -74,6 +74,13 @@ def _items(value: object, key: str) -> list[dict[str, Any]]:
     return items
 
 
+def _workflow_path_matches(value: object, workflow: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    normalized = value.replace("\\", "/")
+    return normalized == workflow or normalized.endswith("/" + workflow)
+
+
 def gate_github(
     *,
     repo: str,
@@ -109,8 +116,15 @@ def gate_github(
                 timeout=timeout,
             )
             runs = _items(runs_payload, "workflow_runs")
+            if any("head_sha" not in run or "path" not in run for run in runs):
+                return {
+                    "status": "BLOCKED",
+                    "code": "WORKFLOW_RUN_RESPONSE_INCOMPLETE",
+                    "message": "workflow run evidence lacks head_sha or path",
+                    "remote_writes": False,
+                }
             matching_run = next(
-                (run for run in runs if run.get("head_sha") == sha and run.get("path", workflow) == workflow),
+                (run for run in runs if run.get("head_sha") == sha and _workflow_path_matches(run.get("path"), workflow)),
                 None,
             )
             if matching_run is None or not isinstance(matching_run.get("id"), int):
@@ -124,9 +138,16 @@ def gate_github(
                 timeout=timeout,
             )
         runs = _items(runs_payload, "workflow_runs")
+        if any("head_sha" not in run or "path" not in run for run in runs):
+            return {
+                "status": "BLOCKED",
+                "code": "WORKFLOW_RUN_RESPONSE_INCOMPLETE",
+                "message": "workflow run evidence lacks head_sha or path",
+                "remote_writes": False,
+            }
         matching_runs = [
             run for run in runs
-            if run.get("head_sha") == sha and run.get("path", workflow) == workflow
+            if run.get("head_sha") == sha and _workflow_path_matches(run.get("path"), workflow)
         ]
         if not matching_runs:
                 return {"status": "FAIL", "code": "WORKFLOW_RUN_NOT_FOUND", "sha": sha, "workflow": workflow}
@@ -154,6 +175,13 @@ def gate_github(
                 "remote_writes": False,
             }
         run = matching_runs[0]
+        if not isinstance(run.get("status"), str) or not isinstance(run.get("conclusion"), str):
+            return {
+                "status": "BLOCKED",
+                "code": "WORKFLOW_RUN_RESPONSE_INCOMPLETE",
+                "message": "workflow run evidence lacks status or conclusion",
+                "remote_writes": False,
+            }
         if run.get("status") != "completed" or run.get("conclusion") != "success":
             return {
                 "status": "FAIL",
@@ -166,6 +194,13 @@ def gate_github(
         jobs = _items(jobs_payload, "jobs")
         if not jobs:
             return {"status": "FAIL", "code": "JOBS_EMPTY", "sha": sha, "workflow": workflow}
+        if any(not isinstance(job.get("conclusion"), str) for job in jobs):
+            return {
+                "status": "BLOCKED",
+                "code": "JOBS_RESPONSE_INCOMPLETE",
+                "message": "job evidence lacks conclusion",
+                "remote_writes": False,
+            }
         bad_jobs = [job.get("name") for job in jobs if job.get("conclusion") != "success"]
         if bad_jobs:
             return {"status": "FAIL", "code": "JOBS_NOT_SUCCESS", "jobs": bad_jobs, "sha": sha}
@@ -174,7 +209,14 @@ def gate_github(
         if not matches:
             return {"status": "FAIL", "code": "CHECK_RUN_NOT_FOUND", "check_name": check_name, "sha": sha}
         check = matches[0]
-        if check.get("head_sha", sha) != sha:
+        if not all(isinstance(check.get(key), str) for key in ("head_sha", "status", "conclusion")):
+            return {
+                "status": "BLOCKED",
+                "code": "CHECK_RESPONSE_INCOMPLETE",
+                "message": "check-run evidence lacks head_sha, status, or conclusion",
+                "remote_writes": False,
+            }
+        if check.get("head_sha") != sha:
             return {"status": "FAIL", "code": "CHECK_SHA_MISMATCH", "check_name": check_name, "sha": sha}
         if check.get("status") != "completed" or check.get("conclusion") != "success":
             return {
@@ -186,7 +228,14 @@ def gate_github(
             }
         if app_id is not None:
             app = check.get("app")
-            if not isinstance(app, dict) or app.get("id") != app_id:
+            if not isinstance(app, dict) or "id" not in app:
+                return {
+                    "status": "BLOCKED",
+                    "code": "CHECK_APP_RESPONSE_INCOMPLETE",
+                    "message": "check-run evidence lacks app id",
+                    "remote_writes": False,
+                }
+            if app.get("id") != app_id:
                 return {
                     "status": "FAIL",
                     "code": "CHECK_APP_MISMATCH",

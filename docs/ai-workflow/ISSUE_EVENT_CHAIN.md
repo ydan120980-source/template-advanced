@@ -15,7 +15,9 @@ previous_event_digest, payload, actor, created_at, event_digest
 
 `event_id` is `evt-<six digit sequence>`. The first event has a null
 `previous_event_digest`; each later event names the immediately preceding
-digest. `event_digest` is SHA-256 of canonical JSON with that field removed.
+digest. Every event in one chain must keep the exact same `task_id` and
+`subject_sha`; a changed subject SHA starts a new chain and is not continuity.
+`event_digest` is SHA-256 of canonical JSON with that field removed.
 Supported event types include task opening/decisions, migration matrices,
 bootstrap transitions, validation/check results, candidate freeze/supersede,
 PR transitions, tag/release evidence, blocking, and task closure.
