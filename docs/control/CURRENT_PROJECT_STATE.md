@@ -1,10 +1,11 @@
 # CURRENT_PROJECT_STATE.md
 
 Last Updated: 2026-08-02
-State Version: v3.0
-State Based On Parent Commit: 37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0
-Last Confirmed Remote PR Head: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+State Version: v3.1
+State Based On Parent Commit: 38b566b04139fdd2de9b73035b66e51807966295
+Last Confirmed Remote PR Head: 38b566b04139fdd2de9b73035b66e51807966295
 Local Stop-State Commit: 37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0
+Current Closeout Commit: 38b566b04139fdd2de9b73035b66e51807966295
 Live Local HEAD: must be resolved with git rev-parse HEAD
 Live Remote PR Head: must be refreshed from GitHub before push, review, merge, tag, or Release
 
@@ -19,7 +20,8 @@ must be refreshed live before every remote transition
 - Current Phase: RELEASE-CANDIDATE
 - Phase Status: the original implementation sprint and the first
   publication-only sprint are both closed without a publication PASS; the
-  final closeout task is planned and has not yet performed a new network write.
+  final closeout task is blocked at the independent GitHub review gate after
+  its exact-head checks passed.
 - Phase Goal: complete only the bounded final closeout sequence and publish
   v1.1.0 from a protected, independently reviewed merged main commit.
 - Historical v1.0.0 remains published and immutable.
@@ -28,8 +30,9 @@ must be refreshed live before every remote transition
 
 - Task ID: RELEASE-V1.1.0-FINAL-CLOSEOUT
 - Mode: Full
-- State: new Task Packet is being established from the local stop baseline;
-  the old publication task is sealed and cannot be used for another push.
+- State: final local commit 38b566b was pushed and its exact PR-head CI/Security
+  checks passed; PR #2 still has no independent approval, so merge, tag, and
+  Release actions are blocked.
 - Required review: approval from another GitHub user; local implementation
   review is not sufficient.
 - CodeGraph: optional maintainer capability; no real project-level index is
@@ -91,7 +94,26 @@ the 6e357d5 head passed its CI/Security checks, `reviewDecision` was
 `REVIEW_REQUIRED`, and `reviews` was empty. That is a prior remote checkpoint,
 not current live state after this task starts.
 
-## 6. Canonical Contracts
+## 6. Final Closeout Checkpoint
+
+The latest exact-head remote checkpoint is:
+
+- final local and remote feature SHA: 38b566b04139fdd2de9b73035b66e51807966295;
+- PR #2: open and mergeable, but `mergeStateStatus=BLOCKED`;
+- review state: `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`;
+- CI run 30743088855: Ubuntu/Windows/macOS Python 3.11/3.12/3.13, 9/9 passed;
+- Security run 30743088859: `codeql` and `credential-scan` passed;
+- additional CodeQL check: passed;
+- PR body: corrected to distinguish local engineering review from GitHub
+  approval by another user;
+- merge, merged-main validation, v1.1.0 tag, tag workflow, Release, and
+  canonical asset verification: not performed because review is required.
+
+This checkpoint is remote evidence for 38b566b. If a later control-document
+commit changes the PR head, all checks must be re-established for that new
+head.
+
+## 7. Canonical Contracts
 
 - Release builds read release files from the Git object database at HEAD and
   refuse dirty, missing, or untracked release files.
@@ -112,19 +134,16 @@ not current live state after this task starts.
 - Template Doctor test helpers and primary CI/release jobs must remain bounded;
   outer job timeouts do not replace subprocess timeouts.
 
-## 7. Active Priorities
+## 8. Active Priorities
 
-1. Initialize the independent FINAL-CLOSEOUT Run Guard and record this
-   stop-state bootstrap.
-2. Complete only the bounded control, test-helper, and workflow-timeout
-   changes in the new packet.
-3. Validate and commit without amending 6e357d5 or 37fb3b4.
-4. Push the final branch with the new plan's retry budget, then refresh all
-   GitHub state before PR, review, merge, tag, or Release transitions.
-5. Keep v1.0.0 unchanged and keep canonical remote artifacts separate from
+1. Stop at `BLOCKED: independent GitHub approval required`; do not self-review
+   or bypass branch protection.
+2. If a real approval arrives, refresh the exact PR head and required checks
+   before protected merge, then validate merged main and continue in order.
+3. Keep v1.0.0 unchanged and keep canonical remote artifacts separate from
    local mutable workspaces.
 
-## 8. File-Count and Evidence Boundaries
+## 9. File-Count and Evidence Boundaries
 
 The old task's counts remain historical evidence:
 
@@ -137,7 +156,7 @@ The old task's counts remain historical evidence:
 The new task has its own artifact budget and stop-state JSON. These counts
 must not be substituted for the old task's counts.
 
-## 9. Stop Rules
+## 10. Stop Rules
 
 - A new budget overrun, forbidden path, stale or corrupted Run Guard evidence,
   failed final check, missing independent review, blocked protected merge,
@@ -148,7 +167,7 @@ must not be substituted for the old task's counts.
 - A missing independent approval must be reported as
   `BLOCKED: independent GitHub approval required`.
 
-## 10. State Refresh Rule
+## 11. State Refresh Rule
 
 The labels above intentionally separate the parent commit used to generate
 this state record, the last confirmed remote PR head, the local stop-state

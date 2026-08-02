@@ -537,3 +537,34 @@ Read-only bootstrap evidence before the new plan:
 No new push, PR edit, merge, tag, Release creation, or artifact upload is
 accepted until the independent FINAL-CLOSEOUT Run Guard is initialized and
 the new local changes pass validation.
+
+## RELEASE-V1.1.0-FINAL-CLOSEOUT — exact-head checks and review stop
+
+Date: 2026-08-02
+Status: BLOCKED: independent GitHub approval required
+Mode: Full
+
+The final local commit was pushed under the new task and the remote branch was
+re-read at the same SHA:
+
+- local and remote feature SHA:
+  `38b566b04139fdd2de9b73035b66e51807966295`;
+- PR #2: open and mergeable, but `mergeStateStatus=BLOCKED`;
+- review: `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`.
+
+Exact-head remote checks passed:
+
+- CI run `30743088855`: Ubuntu/Windows/macOS Python 3.11/3.12/3.13, 9/9;
+- Security run `30743088859`: `codeql` and `credential-scan`;
+- additional CodeQL check: passed.
+
+The PR body was corrected after the push. It now labels the local
+implementation review as local engineering evidence only and explicitly
+requires approval from another GitHub user. It does not use a PR comment as a
+Review approval.
+
+No merge, merged-main validation, v1.1.0 tag, tag workflow, Release, asset
+download, checksum verification, or tagged-source verification was performed.
+The task stops at the independent review gate. The new Run Guard remains
+`not_ready` with `gate.review` as the only blocking finding before any later
+control-document refresh; command budget snapshot is deferred until review.

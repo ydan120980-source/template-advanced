@@ -1,7 +1,7 @@
 # CHATGPT_HANDOFF.md
 
 Last Updated: 2026-08-02
-Based On State Version: v3.0
+Based On State Version: v3.1
 
 ## New-session summary
 
@@ -18,7 +18,8 @@ Based On State Version: v3.0
 - New task goal: close the stop state, add bounded helper/job execution,
   correct PR evidence, then complete protected merge/tag/Release verification
   only after fresh final-head evidence and independent GitHub approval.
-- No new network write has been performed under the new task yet.
+- The final closeout commit 38b566b was pushed; its exact-head CI/Security
+  passed; PR #2 remains blocked because no independent GitHub approval exists.
 
 ## Exact old publication stop state
 
@@ -54,6 +55,22 @@ The previous live GitHub checkpoint had PR #2 open and mergeable, with the
 6e357d5 checks passed, `reviewDecision=REVIEW_REQUIRED`, and `reviews=[]`.
 Refresh GitHub live state after the new plan is initialized; do not reuse
 that checkpoint after pushing a new head.
+
+## Latest exact-head remote checkpoint
+
+- final local and remote feature SHA: 38b566b04139fdd2de9b73035b66e51807966295;
+- CI run 30743088855: 9/9 Ubuntu/Windows/macOS Python 3.11/3.12/3.13 jobs
+  passed;
+- Security run 30743088859: `codeql` and `credential-scan` passed;
+- additional CodeQL check: passed;
+- PR #2: open, mergeable, `mergeStateStatus=BLOCKED`;
+- review: `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`;
+- PR body now explicitly says local implementation review is not GitHub
+  approval and that another GitHub user must approve;
+- v1.1.0 tag, merge, tag workflow, Release, and asset verification: not done.
+
+The last control-document update may change the PR head and would require a
+new exact-head check cycle before any protected transition.
 
 ## New task boundaries
 
