@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "task_id": "RELEASE-V1.1.0-PUBLISH",
+  "status": "blocked",
+  "local_stop_commit": "37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0",
+  "last_confirmed_remote_head": "6e357d55f813bdc6a823ea0f94fd8ef01ee54de4",
+  "retry_used": 2,
+  "retry_limit": 2,
+  "artifact_files": 11,
+  "artifact_limit": 12,
+  "validation_state": "stale_after_network_failure",
+  "unresolved_failures": 1,
+  "github_review_state": "missing",
+  "publication_state": "not_completed",
+  "final_gate": "not_ready",
+  "superseded_by": "RELEASE-V1.1.0-FINAL-CLOSEOUT"
+}

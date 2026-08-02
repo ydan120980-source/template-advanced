@@ -477,3 +477,63 @@ creation, asset download, checksum verification, or tagged-source verification
 was performed. These actions remain blocked by the task packet and branch
 protection until an independent GitHub human approves PR #2. Self-review,
 administrator bypass, and reporting publication success are prohibited.
+
+## RELEASE-V1.1.0-PUBLISH — immutable network stop-state closure
+
+Date: 2026-08-02
+Status: blocked; superseded by RELEASE-V1.1.0-FINAL-CLOSEOUT
+Mode: Full
+
+This entry closes the old publication-only task without changing its prior
+budget or event history. The final facts are:
+
+    Implementation correction: completed
+    Remote candidate: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+    Remote candidate CI/Security: passed for that commit
+    Final local stop-state commit: 37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0
+    Final local stop-state commit pushed: no
+    Retry usage: 2/2
+    Latest network failure: unresolved
+    Validation state: stale after the latest failure event under the old plan
+    GitHub human review: missing
+    Publication: not completed
+    Final gate: not_ready
+    Superseded by: RELEASE-V1.1.0-FINAL-CLOSEOUT
+
+The old task cannot execute another push because its retry budget is exhausted
+and its last network failure was not closed by a legal retry followed by fresh
+accepted validation evidence. This is a network/evidence stop, not a code-test
+failure. Its redacted stop-state record is committed at
+`docs/control/evidence/RELEASE-V1.1.0-PUBLISH_STOP.json`.
+
+## RELEASE-V1.1.0-FINAL-CLOSEOUT — planning and bootstrap
+
+Date: 2026-08-02
+Status: planned; new Run Guard required before implementation or network work
+Mode: Full
+
+The new Task Packet was created after a local read-only baseline and before
+any new network write. Its frozen budgets are:
+
+- maximum changed repository files: 12;
+- unique Run Guard artifact files: 10;
+- shell-command requests: 90;
+- retries: 2.
+
+The planned delivery set is ten files, leaving two file slots in reserve. The
+new task is limited to stop-state control synchronization, the redacted JSON
+evidence, PR wording, Template Doctor test-helper timeouts, the narrow state
+schema compatibility rule, primary CI/release job timeouts, full validation,
+and the protected remote publication sequence.
+
+Read-only bootstrap evidence before the new plan:
+
+- local branch `codex/release-v1.1.0`;
+- local HEAD `37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0`;
+- remote-tracking branch `6e357d55f813bdc6a823ea0f94fd8ef01ee54de4`;
+- local branch ahead by one commit and worktree clean;
+- local `v1.0.0` exists and local `v1.1.0` is absent.
+
+No new push, PR edit, merge, tag, Release creation, or artifact upload is
+accepted until the independent FINAL-CLOSEOUT Run Guard is initialized and
+the new local changes pass validation.

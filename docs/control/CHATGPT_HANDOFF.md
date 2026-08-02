@@ -1,119 +1,95 @@
 # CHATGPT_HANDOFF.md
 
 Last Updated: 2026-08-02
-Based On State Version: v2.2
+Based On State Version: v3.0
 
 ## New-session summary
 
-- Current phase: RELEASE-CANDIDATE.
 - Historical v1.0.0 remains published and unchanged.
-- Historical task RELEASE-V1.1.0 is closed as implementation-complete,
-  locally validated, governance-failed, and publication-incomplete.
-- Current task: RELEASE-V1.1.0-PUBLISH.
-- Current task goal: correct publication evidence, push the final PR branch,
-  obtain final-commit CI/Security and independent human approval, merge through
-  protection, tag the merged main as v1.1.0, and validate the remote Release.
-- Current Run Guard: a new external plan was initialized with a 100 shell-
-  command budget, two retries, and a 12-file artifact budget. Do not reuse the
-  old plan.
-- Current hard stop: final feature-branch CI and Security checks passed, but
-  no GitHub independent human review is present; PR #2 remains blocked.
+- RELEASE-V1.1.0 remains implementation-complete, locally validated, and
+  governance-failed because its command budget was 166/160.
+- RELEASE-V1.1.0-PUBLISH is sealed as a blocked publication task.
+- Its remote candidate `6e357d55f813bdc6a823ea0f94fd8ef01ee54de4` passed the
+  recorded CI/Security checks, but its local stop-state commit
+  `37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0` was never pushed.
+- The old task used its retry budget 2/2; its final network failure is
+  unresolved and its validation evidence is stale under that old plan.
+- New task: RELEASE-V1.1.0-FINAL-CLOSEOUT.
+- New task goal: close the stop state, add bounded helper/job execution,
+  correct PR evidence, then complete protected merge/tag/Release verification
+  only after fresh final-head evidence and independent GitHub approval.
+- No new network write has been performed under the new task yet.
 
-## Historical task facts
+## Exact old publication stop state
 
-The old task must remain described exactly as follows:
-
-    Implementation: completed
-    Local validation: passed
-    Governance final gate: failed
-    Reason: command budget exceeded, 166/160
-    Scope compliance: PARTIAL
-    Owner exception required: YES
+    Task ID: RELEASE-V1.1.0-PUBLISH
+    Implementation correction: completed
+    Remote candidate CI/Security: passed for 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
+    Final local stop-state commit: 37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0
+    Final local stop-state commit pushed: no
+    Retry usage: 2/2
+    Latest network failure: unresolved
+    Validation state: stale after the latest failure event under the old plan
+    GitHub human review: missing
     Publication: not completed
+    Final gate: not_ready
+    Superseded by: RELEASE-V1.1.0-FINAL-CLOSEOUT
 
-The original RELEASE-V1.1.0 task exceeded its command budget by six
-shell-command requests. The historical budget and event ledger remain
-unchanged. Publication work continues only under RELEASE-V1.1.0-PUBLISH.
+The old plan must not be used for another push. Do not alter its budgets,
+delete its failure event, fabricate validation, or report it as successful.
+The redacted stop record is
+`docs/control/evidence/RELEASE-V1.1.0-PUBLISH_STOP.json`.
 
-docs/architecture/CODEGRAPH.md was modified before it was included in the
-original Task Packet Allowed Paths. Its later addition was a retroactive scope
-correction and does not prove that the original scope was respected. The
-repository owner accepts the resulting documentation change as existing input
-to the new publication-only task.
+## Local baseline captured before the new packet
 
-The prior 21/22 discrepancy is recorded as final Git diff 21, execution-time
-unique touched files 22, and Run Guard artifact files 12. The additional
-execution-time path was the temporary .planning/RELEASE-V1.1.0/run-guard-
-input.json bootstrap configuration, later moved outside the repository.
+- branch: codex/release-v1.1.0;
+- local HEAD: 37fb3b4e75fa424bc6871dc140e1518ea0ea4fa0;
+- origin/codex/release-v1.1.0: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4;
+- local branch is ahead by one commit;
+- worktree is clean;
+- v1.0.0 commit: 643eac290b00561666692d41c55ceef546f12e15;
+- local v1.1.0 tag is absent.
 
-## Live baseline before the new task
+The previous live GitHub checkpoint had PR #2 open and mergeable, with the
+6e357d5 checks passed, `reviewDecision=REVIEW_REQUIRED`, and `reviews=[]`.
+Refresh GitHub live state after the new plan is initialized; do not reuse
+that checkpoint after pushing a new head.
 
-- local feature branch: codex/release-v1.1.0
-- local candidate: 547951233e4ea2b90f18ce658cf4e4adc3c7b04a
-- remote PR branch: d1c7a2a5766d39f2e0de240d3d657b1637444677
-- local main: d1c7a2a5766d39f2e0de240d3d657b1637444677
-- origin/main: 5893027b0c57a121b8726b72b39d133b58978f04
-- v1.0.0: 643eac290b00561666692d41c55ceef546f12e15
-- v1.1.0: absent
-- PR #2: open, mergeable, blocked, review required
-- old PR checks: successful for old d1c7a2a only
+## New task boundaries
 
-Re-read all values after every GitHub transition. Old-commit checks cannot
-prove final-commit readiness.
+Allowed repository changes are limited to the new Task Packet, the three
+control documents, the redacted stop JSON, `README.md`, the two specified
+workflows, the two specified test files, and the narrow Template Doctor state
+schema compatibility rule. No product, builder, Run Guard, Doctor redesign,
+dependency, branch-protection, or v1.0.0 changes are allowed.
 
-## Final feature-branch checkpoint
-
-- final feature-branch SHA: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
-- remote feature-branch SHA: 6e357d55f813bdc6a823ea0f94fd8ef01ee54de4
-- PR #2: open, mergeable, `mergeStateStatus=BLOCKED`
-- review state: `reviewDecision=REVIEW_REQUIRED`, `reviews=[]`
-- CI run 30737700031: Ubuntu/Windows/macOS Python 3.11/3.12/3.13, 9/9
-  passed
-- Security run 30737700025: `codeql` and `credential-scan` passed
-- additional CodeQL check: passed
-- v1.1.0 tag and Release: absent; merge, tag, Release, and asset download
-  were not performed
-- Run Guard: 8 events, 0/2 retries, 11/12 artifacts, validation 2/2 passed;
-  gate `not_ready` solely because review is required; command budget remains
-  unsnapshotted while review is pending
-
-## Technical contracts
-
-- Release builds require a clean Git HEAD and read release files from Git
-  objects; non-Git builds require explicit unverified labeling.
-- Canonical Release artifacts come from the successful tag workflow, not from a
-  local mutable workspace or an old Release.
-- SHA256SUMS, the manifest, the publication digest, and the tagged-source
-  verifier with full validation must all pass after download.
-- git archive provides committed-tree traceability but not cross-platform ZIP
-  byte determinism.
-- Protected main/PR checks are Ubuntu, Windows, and macOS with Python 3.11,
-  3.12, and 3.13, plus CodeQL and credential scan.
-- The tag workflow runs its configured Ubuntu/Python 3.13 release-critical
-  chain and does not claim to run the full cross-platform matrix.
-- Release build-and-verify reads contents; publish alone writes contents.
-  CodeQL alone writes security events. Credential scan stays contents read.
-- CodeGraph is optional and unindexed for v1.1.0. Default missing-index
-  behavior is non-blocking; strict missing-index behavior is blocking; corrupt
-  or structurally unrecognized databases block all modes.
-- Exact Doctor, Preflight, and platform-specific pass/skip totals are
-  environment evidence and must not become fixed long-term claims.
+The old local implementation review must be described as local engineering
+evidence only. It is not a GitHub review and cannot satisfy the protected
+branch requirement.
 
 ## Required sequence
 
-1. Finish only the allowed docs, workflow, and static-test correction.
-2. Run local validation and inspect the exact diff.
-3. Commit without amending 5479512.
-4. Push codex/release-v1.1.0 with bounded retries.
-5. Confirm PR #2 head equals the pushed commit and wait for final checks.
-6. Final checks passed, but stop because reviewDecision is REVIEW_REQUIRED;
-   report BLOCKED: independent human approval required.
-7. After real approval, merge through branch protection and confirm local
-   main equals origin/main cleanly.
-8. Re-run merged-main validation, then create and push v1.1.0 exactly once.
-9. Wait for the tag workflow, download its Release assets, and independently
-   verify all canonical files with the tagged-source verifier.
-10. Clean temporary evidence and record the final Run Guard gate.
+1. Initialize the independent FINAL-CLOSEOUT Run Guard before any new network
+   command.
+2. Complete the bounded state, evidence, timeout, and workflow changes.
+3. Run focused and full local validation from the final local commit.
+4. Push only the feature branch with initial attempt plus at most two retries.
+5. Confirm PR #2 head equals the final local commit, then correct the PR body
+   to state that another GitHub user approval is required.
+6. Wait for exact-head CI/Security and stop if any check fails or is incomplete.
+7. Stop with `BLOCKED: independent GitHub approval required` until a real
+   APPROVED review from another user exists.
+8. After approval only: merge through protection, validate merged main, tag
+   v1.1.0 from merged main, wait for the tag workflow, and independently
+   verify the downloaded canonical assets and tagged source.
+9. Clean temporary directories and record the final Run Guard gate.
 
-Never force-push, bypass protection, self-review, move v1.0.0, upload local
-artifacts, or report an incomplete gate as publication success.
+Never self-review, bypass protection, force-push, move v1.0.0, upload local
+artifacts, or report publication success without every gate.
+
+## State label rule
+
+`CURRENT_PROJECT_STATE.md` intentionally uses separate fields for the parent
+commit of the state record, last confirmed remote PR head, local stop-state
+commit, and live values requiring refresh. A remote checkpoint must never be
+called the current local HEAD.
