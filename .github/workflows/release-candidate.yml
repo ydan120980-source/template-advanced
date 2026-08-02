@@ -1,0 +1,51 @@
+name: release-candidate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-candidate:
+    name: release-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Unit tests
+        run: python -B -m unittest discover -s tests
+      - name: Verify
+        run: bash scripts/verify.sh
+      - name: Evals
+        run: bash evals/run-evals.sh
+      - name: Build release candidate
+        run: python -B scripts/build-release.py --out-dir dist-candidate
+      - name: Verify clean extraction
+        run: >-
+          python -B scripts/verify-release-archive.py
+          --archive dist-candidate/template-advanced-1.0.0.zip
+          --manifest dist-candidate/template-advanced-1.0.0.manifest.json
+          --validate
+      - name: Workflow static check
+        run: python -B -m tools.governance_v2 gate static --root .
+      - name: Payload digest
+        run: cat dist-candidate/template-advanced-1.0.0.digest.txt
+      - name: Provenance summary
+        run: >-
+          python -B -c "from pathlib import Path; print('candidate provenance: ' +
+          Path('dist-candidate/template-advanced-1.0.0.manifest.json').read_text(encoding='utf-8').splitlines()[0])"
+      - name: Release-set summary
+        run: >-
+          python -B -c "from pathlib import Path; print('candidate release set: ' +
+          ','.join(sorted(path.name for path in Path('dist-candidate').iterdir())))"

@@ -1,66 +1,26 @@
 ---
 name: aiwf-compress-state
-description: Compress accepted Evidence Ledger history into durable CURRENT_PROJECT_STATE.md and CHATGPT_HANDOFF.md updates.
+description: Compress accepted Evidence Ledger results into the GitHub Task Issue summary and durable v2 governance evidence without creating a second authority.
 ---
 
 # aiwf-compress-state
 
-Use this skill after accepted Medium/Large work, closeout, axis switch, or several accumulated ledgers.
+Use after accepted Medium/Large work, closeout, an axis switch, or an approved PR A/PR B boundary.
 
 ## Inputs
 
-- Recent accepted Evidence Ledgers
-- `docs/control/SPRINT_LEDGER.md`
-- `docs/control/CURRENT_PROJECT_STATE.md`
-- `docs/control/CHATGPT_HANDOFF.md`
-- `docs/control/NEXT_CODEX_TASK.md`, if it represents the next planned action
-- `docs/ai-workflow/PROJECT_STATE_MACHINE.md`
+- Accepted Evidence Ledger and reviewer verdict
+- Verified Task Issue contract and event chain
+- Remote-vs-local validation status
+- docs/ai-workflow governance references
+- Transitional control files only while the v1-to-v2 migration is active
 
-## Stable Facts Vs Transient Details
+## Rules
 
-Promote to stable facts:
+Promote only accepted capabilities, current phase/axis, closed areas, durable boundaries, canonical validation, continuing risks, and the next bounded task. Do not promote transient command noise, stale SHAs, one-off failures, chat speculation, unaccepted reviewer suggestions, tokens, or local paths.
 
-- Accepted capabilities
-- Current phase and axis
-- Closed axes and bugfix-only areas
-- Durable boundaries and forbidden assumptions
-- Validation commands that remain canonical
-- Active risks with continuing mitigation
-- Next highest-value axis or next bounded sprint
+After PR A, write the durable summary as a validated Task Issue event/comment; do not recreate CURRENT_PROJECT_STATE.md, CHATGPT_HANDOFF.md, or SPRINT_LEDGER.md as a second control plane. .aiwf runtime data is evidence, not state authority. State compression never creates code commits, tags, releases, or remote protection changes.
 
-Do not promote transient details:
+## Stop conditions and output
 
-- Temporary command output noise
-- One-off implementation attempts
-- Failed paths that no longer matter
-- Chat-only speculation
-- Unaccepted reviewer suggestions
-- Historical details already captured in the ledger
-
-## Process
-
-1. Read recent ledger entries and identify accepted outcomes.
-2. Update `CURRENT_PROJECT_STATE.md` with current phase, canonical facts, completed capabilities, active priorities, active risks, closed axes, validation summary, and next sprint candidates.
-3. Update `CHATGPT_HANDOFF.md` with concise new-session context, last accepted sprint, active risks, default next action, and stale-state warning if needed.
-4. Preserve append-only history in `SPRINT_LEDGER.md`; do not rewrite old entries unless correcting factual errors.
-5. Clear or replace stale `NEXT_CODEX_TASK.md` only if explicitly asked.
-
-## Outputs
-
-- Proposed or applied `docs/control/CURRENT_PROJECT_STATE.md` update
-- Proposed or applied `docs/control/CHATGPT_HANDOFF.md` update
-- Active priorities update
-- Risks update
-- Closed axes / bugfix-only update
-- Next axis proposal
-- Follow-up task recommendation
-
-## Stop Conditions
-
-Stop if:
-
-- Ledgers are missing or contradictory.
-- The latest sprint is not accepted.
-- Current repo facts conflict with proposed stable state.
-- The update would require guessing project direction.
-- The user has not authorized state file edits.
+Stop if ledgers contradict the Issue, the current base/head is unknown, the sprint is not accepted, or the update requires guessing product direction. Return the proposed Issue summary/event, accepted facts, risks, closed axes, next sprint, and any owner decision still required.

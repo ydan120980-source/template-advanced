@@ -1,61 +1,34 @@
 ---
 name: aiwf-plan-sprint
-description: Plan the next bounded AI Coding Workflow sprint and generate docs/control/NEXT_CODEX_TASK.md from current state, ledger, handoff, and scorecard inputs.
+description: Plan the next bounded AI Coding Workflow sprint from the verified GitHub Task Issue, current repository evidence, and the approved execution plan.
 ---
 
 # aiwf-plan-sprint
 
-Use this skill when planning the next Codex sprint before implementation.
+Use this Skill before implementation when a new bounded sprint is needed.
 
-## Inputs
+## Authority and inputs
 
-- `docs/control/CURRENT_PROJECT_STATE.md`
-- `docs/control/SPRINT_LEDGER.md`, especially recent accepted or blocked entries
-- `docs/control/CHATGPT_HANDOFF.md`
-- `docs/control/CODEX_RUNTIME_PROFILE.md`
-- `docs/ai-workflow/SPRINT_DECISION_SCORECARD.md`
-- Relevant project files needed to understand the candidate sprint
+1. Read AGENTS.md and the current user instruction.
+2. Read the verified GitHub Task Issue body with issue sync or issue verify.
+3. Use a validated .aiwf/cache only when the remote Issue is unavailable; label the result CACHED and never change the contract from cache.
+4. Read the stable governance documents under docs/ai-workflow/ and the task-specific source/tests named by the contract.
+5. During the v1-to-v2 migration, read the transitional docs/control/NEXT_CODEX_TASK.md; it may narrow but never expand Issue scope.
 
-Do not read `archive/`, `examples/`, or `references/` unless the user explicitly requests them.
+Do not treat Run Guard JSONL, planning journals, chat summaries, or old state documents as a second authority.
 
 ## Process
 
-1. Identify Current Phase, Current Axis, active priorities, risks, closed axes, and stale state warnings.
-2. Review the latest ledger evidence and determine whether the previous sprint was accepted, needs follow-up, blocked, or should trigger closeout.
-3. Select the highest-value bounded next sprint.
-4. Choose Workflow Mode:
-   - Lite: small local fix, narrow Allowed Paths, focused validation is enough, no state update required.
-   - Standard: medium work, multi-file consistency, shared docs/contracts, adjacent behavior, or local hardening.
-   - Full: large work, new axis, state transition, boundary-sensitive work, public interface/contract change, or reviewer-required work.
-5. Apply scorecard thresholds:
-   - Outcome Impact + Project Value < 7: do not generate implementation; choose closeout, context fill, or switch axis.
-   - Verification Confidence <= 2: generate preflight/read-only probe.
-   - Context Completeness <= 2: collect context first.
-   - Boundary Risk >= 4 or Reviewer Worthiness >= 4: shrink scope or use Full with reviewer.
-6. Classify AIWF Run Guard as `required`, `optional`, or `off` in the Task Packet. Default concurrency/retry-sensitive Full work to `required`; use `off` only when the tool is unavailable or disproportionate and state why.
-7. Define one task-level shell-command metric for all main/helper sessions. Declare expected source IDs, role allocations, and reserve before execution; never reinterpret the limit as main-only after helpers run.
-8. Define a delivery-file budget that counts unique recorded artifact paths, including the generated Task Packet when it is a delivery artifact. Keep isolated planning evidence outside that delivery count and reserve headroom instead of planning exactly to the limit.
-9. Require fail-fast validation batches: every native command's exit code must be checked before the next command runs.
-10. Draft `docs/control/NEXT_CODEX_TASK.md` with goal, mode, required reading, Allowed Paths, Forbidden Paths, budget, validation, stop conditions, return format, and the Run Guard classification.
+Identify the current phase, axis, accepted evidence, active risks, closed areas, and stale facts. Select one bounded high-value sprint. Choose Lite, Standard, or Full based on scope, contract/public-interface risk, and reviewer need. Define Allowed Paths, Forbidden Paths, native validation, stop conditions, delivery-file budget, and one aggregate shell-command metric.
 
-## Outputs
+For Full work, initialize Run Guard only as optional diagnostic evidence unless the Task Issue explicitly requires it; it must not become a release gate. If the contract, base SHA, remote state, architecture, dependency, CI, public interface, or product direction is ambiguous, stop for the owner decision.
 
-- Updated or proposed `docs/control/NEXT_CODEX_TASK.md`
-- Scorecard summary for Standard / Full
-- Lite decision note for Lite
-- Reviewer requirement, if any
-- Run Guard classification and required gate command for Standard / Full work
-- Aggregate command metric, declared session sources, role allocations, and reserve
-- Unique delivery-file metric, limit, planned files, and reserve
-- State update recommendation, if planning reveals stale state
+During migration, generate/update the local Task Packet. After PR A, record the next plan as an Issue event or Issue comment instead of creating a durable repository-local planning authority.
 
-## Stop Conditions
+## Stop conditions
 
-Stop and ask for clarification or context if:
+Stop if the Issue is missing/invalid, cache validation fails, the base SHA drifts, no bounded sprint can be defined, validation cannot be stated, or the candidate needs forbidden paths, remote mutation, a secret, a dependency, or an unapproved architecture/product decision.
 
-- Required control files are missing or contradictory.
-- The repo state appears newer than the current handoff or ledger.
-- No bounded high-value sprint can be identified.
-- The only useful work requires Forbidden Paths.
-- Validation cannot be defined.
-- The candidate sprint would require unapproved dependency, CI, public interface, or architecture changes.
+## Output
+
+Return the Task Packet or Issue event proposal, scope/budget, validation commands, reviewer requirement, Run Guard diagnostic classification, risks, and the next explicit decision.

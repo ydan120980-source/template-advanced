@@ -132,12 +132,38 @@ def sync_contract(
     *,
     body: str | None = None,
     body_file: Path | None = None,
+    cache: Path | None = None,
     repo: str | None = None,
     issue_number: int | None = None,
     issue_url: str | None = None,
     output: Path | None = None,
 ) -> dict[str, Any]:
     """Read, verify, and optionally cache a TaskContract without writing GitHub."""
+
+    if cache is not None:
+        cached = _read_json(cache)
+        raw_cached = cached.get("contract", cached)
+        if not isinstance(raw_cached, dict):
+            raise IssueCommandError(
+                "validated cache has no contract object",
+                status="FAIL",
+                code="CACHE_INVALID",
+            )
+        report = verify_contract(raw_cached)
+        if report["status"] != "PASS":
+            raise IssueCommandError(
+                "validated cache contract is invalid",
+                status="FAIL",
+                code="CACHE_INVALID",
+            )
+        return {
+            "status": "CACHED",
+            "code": "VALIDATED_CACHE",
+            "source": "cache",
+            "cache_path": str(cache),
+            "contract": raw_cached,
+            "contract_digest": report["contract_digest"],
+        }
 
     source = "provided_body"
     resolved_url = issue_url
@@ -186,6 +212,33 @@ def sync_contract(
     return result
 
 
+def init_contract(*, contract_path: Path, output: Path | None = None) -> dict[str, Any]:
+    """Validate a local TaskContract and optionally write a local seed cache."""
+
+    contract = load_contract(contract_path)
+    result: dict[str, Any] = {
+        "status": "PASS",
+        "code": "CONTRACT_INITIALIZED",
+        "source": str(contract_path),
+        "contract": contract.to_dict(),
+        "contract_digest": contract.digest,
+    }
+    if output is not None:
+        try:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(
+                json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except (OSError, UnicodeError) as exc:
+            raise IssueCommandError(
+                f"cannot write contract cache {output}: {type(exc).__name__}",
+                code="CACHE_WRITE_FAILED",
+            ) from exc
+        result["cache_path"] = str(output)
+    return result
+
+
 def require_write_confirmation(confirmed: bool) -> None:
     """Reject a future Issue mutation unless explicit confirmation is present."""
 
@@ -195,6 +248,80 @@ def require_write_confirmation(confirmed: bool) -> None:
             status="BLOCKED",
             code="CONFIRM_WRITE_REQUIRED",
         )
+
+
+def _issue_comments_url(repo: str, issue_number: int) -> str:
+    return _issue_api_url(repo, issue_number) + "/comments"
+
+
+def append_issue_event(
+    *,
+    event_path: Path,
+    repo: str | None,
+    issue_number: int | None,
+    issue_url: str | None,
+    confirmed: bool,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    """Append one validated event as an Issue comment after explicit confirmation."""
+
+    event_raw = _read_json(event_path)
+    try:
+        event = TaskEvent.from_dict(event_raw)
+    except (ContractError, TypeError, KeyError) as exc:
+        raise IssueCommandError(str(exc), status="FAIL", code="INVALID_EVENT") from exc
+    require_write_confirmation(confirmed)
+
+    resolved_repo = repo
+    resolved_number = issue_number
+    if issue_url:
+        parsed = urlparse(issue_url)
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) < 4 or parts[0] != "repos":
+            raise IssueCommandError("issue_url must be a GitHub API Issue URL", code="INVALID_ISSUE_URL")
+        resolved_repo = f"{parts[1]}/{parts[2]}"
+        try:
+            resolved_number = int(parts[3])
+        except ValueError as exc:
+            raise IssueCommandError("issue_url has an invalid issue number", code="INVALID_ISSUE_URL") from exc
+    if not resolved_repo or resolved_number is None:
+        raise IssueCommandError(
+            "provide --repo with --issue-number or --issue-url",
+            code="INPUT_REQUIRED",
+        )
+    url = _issue_comments_url(resolved_repo, resolved_number)
+    body = "```json\n" + json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True, indent=2) + "\n```\n"
+    request = Request(
+        url,
+        data=json.dumps({"body": body}).encode("utf-8"),
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "template-advanced-governance-v2",
+            **(
+                {"Authorization": f"Bearer {token}"}
+                if (token := os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+                else {}
+            ),
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise IssueCommandError(f"GitHub API returned HTTP {exc.code}", code="REMOTE_API_ERROR") from exc
+    except (URLError, TimeoutError, OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise IssueCommandError(f"GitHub API unavailable: {type(exc).__name__}", code="REMOTE_API_UNAVAILABLE") from exc
+    if not isinstance(payload, dict):
+        raise IssueCommandError("GitHub response is not a JSON object", code="REMOTE_RESPONSE_INVALID")
+    return {
+        "status": "PASS",
+        "code": "EVENT_APPENDED",
+        "event_digest": event.event_digest,
+        "issue_url": issue_url or _issue_api_url(resolved_repo, resolved_number),
+        "comment_url": payload.get("html_url") or payload.get("url"),
+    }
 
 
 def verify_event_chain(events: Iterable[dict[str, Any] | TaskEvent]) -> dict[str, Any]:
@@ -241,3 +368,23 @@ def event_digest(raw: dict[str, Any]) -> str:
     value = dict(raw)
     value.pop("event_digest", None)
     return sha256_canonical(value)
+
+
+def load_event_chain(path: Path) -> list[dict[str, Any]]:
+    """Load a JSON array of Issue events from a local cache file."""
+
+    try:
+        value = json.loads(_read_text(path))
+    except json.JSONDecodeError as exc:
+        raise IssueCommandError(
+            f"invalid event chain in {path}: {exc.msg}",
+            status="FAIL",
+            code="INVALID_EVENT_CHAIN",
+        ) from exc
+    if not isinstance(value, list):
+        raise IssueCommandError(
+            "event chain cache must be a JSON array",
+            status="FAIL",
+            code="INVALID_EVENT_CHAIN",
+        )
+    return value

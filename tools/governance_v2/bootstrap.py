@@ -70,30 +70,64 @@ def snapshot(
 ) -> dict[str, Any]:
     """Capture local refs without claiming remote branch settings."""
 
-    base_sha = _git(root, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
-    head_sha = _git(root, "rev-parse", "--verify", f"{head_ref}^{{commit}}")
-    current_sha = _git(root, "rev-parse", "HEAD")
-    branch = _git(root, "branch", "--show-current")
-    if expected_base_sha and base_sha != expected_base_sha:
-        result = {"status": "BLOCKED", "code": "BASELINE_DRIFT", "expected_base_sha": expected_base_sha, "actual_base_sha": base_sha}
-    elif expected_head_sha and head_sha != expected_head_sha:
-        result = {"status": "BLOCKED", "code": "PR_HEAD_DRIFT", "expected_head_sha": expected_head_sha, "actual_head_sha": head_sha}
+    metadata = {
+        "repository_id": repository_id,
+        "base_ref": base_ref,
+        "head_ref": head_ref,
+        "expected_base_sha": expected_base_sha,
+        "expected_head_sha": expected_head_sha,
+        "remote_fact_status": "NOT_READ",
+        "remote_settings": None,
+        "remote_writes": False,
+        "fetched_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+    try:
+        _git(root, "rev-parse", "--show-toplevel")
+    except BootstrapError as exc:
+        if expected_base_sha or expected_head_sha:
+            result = {
+                **metadata,
+                "status": "BLOCKED",
+                "code": "LOCAL_GIT_UNAVAILABLE",
+                "message": str(exc),
+                "local_git_status": "NOT_AVAILABLE",
+                "base_sha": None,
+                "head_sha": None,
+                "current_branch": None,
+                "current_head_sha": None,
+            }
+        else:
+            result = {
+                **metadata,
+                "status": "CACHED",
+                "code": "LOCAL_BASELINE_UNAVAILABLE",
+                "message": str(exc),
+                "local_git_status": "NOT_AVAILABLE",
+                "base_sha": None,
+                "head_sha": None,
+                "current_branch": None,
+                "current_head_sha": None,
+            }
     else:
-        result = {
-            "status": "CACHED",
-            "code": "LOCAL_BASELINE_ONLY",
-            "repository_id": repository_id,
-            "base_ref": base_ref,
-            "base_sha": base_sha,
-            "head_ref": head_ref,
-            "head_sha": head_sha,
-            "current_branch": branch,
-            "current_head_sha": current_sha,
-            "remote_fact_status": "NOT_READ",
-            "remote_settings": None,
-            "remote_writes": False,
-            "fetched_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        }
+        base_sha = _git(root, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
+        head_sha = _git(root, "rev-parse", "--verify", f"{head_ref}^{{commit}}")
+        current_sha = _git(root, "rev-parse", "HEAD")
+        branch = _git(root, "branch", "--show-current")
+        if expected_base_sha and base_sha != expected_base_sha:
+            result = {"status": "BLOCKED", "code": "BASELINE_DRIFT", "expected_base_sha": expected_base_sha, "actual_base_sha": base_sha}
+        elif expected_head_sha and head_sha != expected_head_sha:
+            result = {"status": "BLOCKED", "code": "PR_HEAD_DRIFT", "expected_head_sha": expected_head_sha, "actual_head_sha": head_sha}
+        else:
+            result = {
+                **metadata,
+                "status": "CACHED",
+                "code": "LOCAL_BASELINE_ONLY",
+                "local_git_status": "AVAILABLE",
+                "base_sha": base_sha,
+                "head_sha": head_sha,
+                "current_branch": branch,
+                "current_head_sha": current_sha,
+            }
     result["snapshot_digest"] = sha256_canonical({key: value for key, value in result.items() if key != "snapshot_digest"})
     if output is not None:
         _write(output, result)

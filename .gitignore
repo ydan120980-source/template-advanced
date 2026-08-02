@@ -62,6 +62,7 @@ logs/
 
 # planning-with-files journals and local execution evidence
 .planning/
+.aiwf/
 /task_plan.md
 /findings.md
 /progress.md

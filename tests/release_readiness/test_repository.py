@@ -49,6 +49,14 @@ class ReleaseReadinessTests(unittest.TestCase):
             rule_id: results[rule_id].to_dict()
             for rule_id in sorted(required_passes)
             if results[rule_id].status != "pass"
+            and not (
+                rule_id
+                in {
+                    "control.current_state_freshness",
+                    "control.next_task_executable",
+                }
+                and results[rule_id].status == "skip"
+            )
         }
         self.assertEqual(failures, {})
 
@@ -76,6 +84,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             if line.strip() and not line.lstrip().startswith("#")
         }
         required = {
+            ".aiwf/",
             ".planning/",
             "/.mode",
             "/.nonce",
@@ -103,27 +112,28 @@ class ReleaseReadinessTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("inert reference prompts", prompt_readme)
 
-    def test_control_documents_are_clean_template_state(self) -> None:
-        ledger = (REPO_ROOT / "docs" / "control" / "SPRINT_LEDGER.md").read_text(
-            encoding="utf-8"
+    def test_v2_governance_documents_replace_active_control_state(self) -> None:
+        required = (
+            "TASK_ISSUE_CONTRACT.md",
+            "ISSUE_EVENT_CHAIN.md",
+            "OFFLINE_CACHE.md",
+            "REMOTE_GATES.md",
+            "GITHUB_RELEASE_READINESS.md",
+            "V1_TO_V2_MIGRATION.md",
         )
-        self.assertIn("append-only", ledger)
-        self.assertIn("no recorded sprints", ledger)
-        for author_id in ("V4", "V5", "V6", "V7", "V8", "V9", "V10", "V11", "V12", "V13", "V14"):
-            self.assertNotIn(f"GITHUB-RELEASE-{author_id}", ledger)
+        for name in required:
+            with self.subTest(name=name):
+                text = (REPO_ROOT / "docs" / "ai-workflow" / name).read_text(encoding="utf-8")
+                self.assertRegex(text, r"[A-Za-z0-9]")
+                self.assertNotRegex(text, r"[A-Za-z]:\\")
+                self.assertNotIn("C:\\Users", text)
         for relative in (
             "docs/control/NEXT_CODEX_TASK.md",
             "docs/control/CURRENT_PROJECT_STATE.md",
             "docs/control/CHATGPT_HANDOFF.md",
             "docs/control/SPRINT_LEDGER.md",
         ):
-            text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-            self.assertNotRegex(text, r"[A-Za-z]:\\", relative)
-            self.assertNotIn("C:\\Users", text)
-        packet = (REPO_ROOT / "docs" / "control" / "NEXT_CODEX_TASK.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("TEMPLATE-ONBOARDING-V1", packet)
+            self.assertFalse((REPO_ROOT / relative).exists(), relative)
 
     def test_apache_license_is_complete_and_documented(self) -> None:
         license_text = (REPO_ROOT / "LICENSE").read_text(encoding="utf-8")

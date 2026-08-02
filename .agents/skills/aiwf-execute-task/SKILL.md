@@ -1,77 +1,32 @@
 ---
 name: aiwf-execute-task
-description: Execute the current docs/control/NEXT_CODEX_TASK.md within scope, validate the result, and return an Evidence Ledger.
+description: Execute the current verified Task Issue and transitional Task Packet within scope, validate the result, and return an auditable Evidence Ledger.
 ---
 
 # aiwf-execute-task
 
-Use this skill when implementing the current Codex task packet.
+## Required reading
 
-## Required Reading
+Read AGENTS.md, the verified Task Issue contract, the task-specific docs/ai-workflow references, and (during migration) the current docs/control/NEXT_CODEX_TASK.md. Read source and tests before changing public contracts. Use issue sync --cache only when the cache digest verifies.
 
-1. `AGENTS.md`
-2. `docs/control/NEXT_CODEX_TASK.md`
-3. For Standard / Full: `docs/control/CURRENT_PROJECT_STATE.md`
-4. For Standard / Full: `docs/control/CODEX_RUNTIME_PROFILE.md`
-5. Task-specific files listed in the task packet
+## Scope rules
 
-Read `docs/ai-workflow/` only when the task packet requires scorecard, ledger, state machine, or low-cost workflow reference.
+- Modify only Issue/Task-Packet Allowed Paths.
+- Never use a cache to widen scope or claim a remote Check Run.
+- Do not add dependencies, CI permissions, public interfaces, or architecture surfaces unless the contract explicitly allows them.
+- Do not invoke --confirm-write, merge, push, tag, Release, or ruleset changes unless the owner explicitly authorizes that exact remote action.
+- Preserve unrelated worktree changes and never use history-rewriting or broad destructive commands.
 
-## Scope Rules
+## Execution and validation
 
-- Modify only Allowed Paths listed in `NEXT_CODEX_TASK.md`.
-- Treat read-only paths as context only.
-- Do not modify Forbidden Paths.
-- Do not add dependencies, CI, workflows, public entrypoints, or architecture surfaces unless explicitly allowed.
-- Do not update state files unless the task explicitly asks.
+Choose disjoint workstreams when parallel work materially helps; declare ownership and return all results to the main thread. Run every native command separately, inspect its own exit code, and record PASS/FAIL/BLOCKED/CACHED/NOT_RUN honestly. Use -B and keep runtime output in .aiwf, never in source.
 
-## Budget Rules
+Run Guard may record paths, retries, handoffs, and local summaries when the Task Issue calls for diagnostic evidence. Its budget/review findings do not qualify a release and cannot override CI, Security, release-candidate, payload/provenance, or Remote Gate evidence.
 
-- Track maximum files changed, commands run, retries, helper calls, and execution time from the task packet.
-- Count the declared shell-command metric across every main/helper session from the authorized task start; role allocations are subdivisions of one task-level limit.
-- Count unique recorded delivery artifacts against the original file limit; duplicate or case-variant paths do not create extra budget, while the Task Packet counts when declared as a delivery artifact.
-- Stop before exceeding budget.
-- If scope legitimately needs to grow, report escalation instead of silently expanding.
+## Failure handling
 
-## Run Guard
-
-- Read the Task Packet's Run Guard classification before implementation.
-- When `required`, initialize `tools.aiwf_run_guard` in the active isolated plan before implementation work.
-- Record `command_failed` or `integration_failed` before any counted retry, then record exactly one `retry` with `retry_of` for the next attempt.
-- Record workstream starts, artifacts, handoffs, validation, and review evidence. Do not backfill automatic evidence for events that predate initialization; label them bootstrap evidence instead.
-- After implementation and validation, run a pre-review gate. When independent review is required, `gate.review` must be its only unresolved finding; otherwise stop and fix or escalate before review.
-- Draft a provisional Evidence Ledger for the independent reviewer. After a pass, record `review_passed`; do not finalize until command snapshots and the final gate are current. A bounded final confirmation may check only that the finalized ledger incorporates the issued review accurately.
-- After `review_passed`, snapshot every declared main/helper JSONL in one aggregate budget operation, then run the final gate. Missing, stale, duplicated, main-only, or over-limit evidence blocks acceptance.
-- Stop on corrupted evidence, ownership conflicts, stale validation/review evidence, unresolved failures, or an unapproved budget overrun.
-- Treat expected domain exit codes, monitoring, helper messages, and successful revalidation as non-retries.
-- After every native command in a batched shell request, inspect its exit code before running the next command. In PowerShell, `$ErrorActionPreference='Stop'` alone is insufficient for native executables; explicitly stop when `$LASTEXITCODE` is non-zero.
-
-## Validation Rules
-
-- Run the validation commands listed in the task packet.
-- Use focused validation for Lite.
-- Use focused plus relevant adjacent/default checks for Standard / Full when specified.
-- Report every command attempted and its exact result.
-- Never report a batch as passed from its final outer exit code when an earlier inner command failed.
-- If validation cannot run, report the command, reason, and whether this blocks acceptance.
-
-## Failure Handling
-
-- Fix only failures caused by this sprint.
-- Do not chase unrelated pre-existing failures.
-- If failed, partial, or blocked, classify the failure as scope creep, boundary violation, verification failure, context missing, wrong task size, low value work, workspace noise mix-in, fake confidence, architecture drift, or product drift.
+Fix only failures caused by this sprint. Record a failure before a retry and stop on an over-budget retry, scope conflict, unsupported workflow shape, remote mutation requirement, secret, or unresolved validation failure.
 
 ## Output
 
-Return an Evidence Ledger containing:
-
-- Sprint ID, goal, task size, and workflow mode
-- Files changed and behavior changed
-- Commands run and results
-- Tests/docs added or updated
-- Scope check against Allowed Paths and Forbidden Paths
-- Risks and known limitations
-- Failure taxonomy if relevant
-- Run Guard gate result, event/retry counts, and bootstrap evidence limitation when enabled
-- State files updated or state update recommendation
-- Follow-up candidates and suggested next step
+Return an Evidence Ledger with task/contract identity, files changed/deleted, behavior changes, commands and native results, tests/docs, scope/budget, local-vs-remote evidence, risks/TODOs, reviewer result, Git state, and one next step. Stop at the plan's user review point.

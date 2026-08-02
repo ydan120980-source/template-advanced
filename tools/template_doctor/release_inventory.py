@@ -57,6 +57,7 @@ _EXCLUDED_DIR_NAMES = frozenset(
         ".cache",
         ".codegraph",
         ".git",
+        ".aiwf",
         ".local-tools",
         ".mypy_cache",
         ".next",
@@ -112,6 +113,14 @@ _EXCLUDED_SUFFIXES = (".class", ".jks", ".key", ".log", ".p12", ".pem", ".pfx", 
 _SECRET_ENV_SUFFIX = ".env."
 _EXCLUDED_UNDER_EVALS = frozenset({"artifacts", "results", "tmp"})
 _EXCLUDED_UNDER_GITHUB_CODEX = frozenset({"logs", "tmp"})
+_RETIRED_CONTROL_FILES = frozenset(
+    {
+        "docs/control/NEXT_CODEX_TASK.md",
+        "docs/control/CURRENT_PROJECT_STATE.md",
+        "docs/control/CHATGPT_HANDOFF.md",
+        "docs/control/SPRINT_LEDGER.md",
+    }
+)
 
 # Text suffixes scanned for privacy and local-path hygiene by the verifier.
 TEXT_FILE_SUFFIXES = frozenset(
@@ -185,6 +194,8 @@ def _is_excluded(relative: str) -> bool:
     if name.endswith(_EXCLUDED_SUFFIXES):
         return True
     if any(part in _EXCLUDED_DIR_NAMES for part in parts[:-1]):
+        return True
+    if relative in _RETIRED_CONTROL_FILES or relative.startswith("docs/control/evidence/"):
         return True
     if parts[0] == "evals" and any(part in _EXCLUDED_UNDER_EVALS for part in parts[1:-1]):
         return True

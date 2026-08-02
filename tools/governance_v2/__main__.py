@@ -9,11 +9,29 @@ from pathlib import Path
 from typing import Any
 
 from .bootstrap import BootstrapError, plan as bootstrap_plan, snapshot as bootstrap_snapshot
-from .issue import IssueCommandError, load_contract, sync_contract, verify_contract
+from .issue import (
+    IssueCommandError,
+    append_issue_event,
+    init_contract,
+    load_contract,
+    load_event_chain,
+    sync_contract,
+    verify_contract,
+    verify_event_chain,
+)
 from .migration import MigrationError, build_matrices, verify_matrices
+from .remote import RemoteGateError, gate_github
+from .workflow import WorkflowCheckError, static_check
 
 
-EXIT_CODES = {"PASS": 0, "FAIL": 1, "BLOCKED": 2, "CACHED": 3, "NOT_RUN": 4}
+EXIT_CODES = {
+    "PASS": 0,
+    "STATIC_TARGETED_PASS": 0,
+    "FAIL": 1,
+    "BLOCKED": 2,
+    "CACHED": 3,
+    "NOT_RUN": 4,
+}
 
 
 class UsageError(ValueError):
@@ -40,10 +58,21 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--repo")
     sync.add_argument("--issue-number", type=int)
     sync.add_argument("--issue-url")
+    sync.add_argument("--cache", type=_path)
     sync.add_argument("--output", type=_path)
+    init = issue_commands.add_parser("init")
+    init.add_argument("--contract", required=True, type=_path)
+    init.add_argument("--output", type=_path)
+    append = issue_commands.add_parser("append")
+    append.add_argument("--event-file", required=True, type=_path)
+    append.add_argument("--repo")
+    append.add_argument("--issue-number", type=int)
+    append.add_argument("--issue-url")
+    append.add_argument("--confirm-write", action="store_true")
     verify = issue_commands.add_parser("verify")
     verify.add_argument("--contract", type=_path)
     verify.add_argument("--body-file", type=_path)
+    verify.add_argument("--events-file", type=_path)
 
     migration = domains.add_parser("migration")
     migration_commands = migration.add_subparsers(dest="command", required=True)
@@ -68,18 +97,44 @@ def build_parser() -> argparse.ArgumentParser:
     plan = bootstrap_commands.add_parser("plan")
     plan.add_argument("--snapshot", type=_path)
     plan.add_argument("--output", type=_path)
+
+    gate = domains.add_parser("gate")
+    gate_commands = gate.add_subparsers(dest="command", required=True)
+    static = gate_commands.add_parser("static")
+    static.add_argument("--root", default=".")
+    github = gate_commands.add_parser("github")
+    github.add_argument("--repo", required=True)
+    github.add_argument("--sha", required=True)
+    github.add_argument("--workflow", required=True)
+    github.add_argument("--check-name", required=True)
+    github.add_argument("--app-id", type=int)
+    github.add_argument("--fixture", type=_path)
     return parser
 
 
 def _run(args: argparse.Namespace) -> dict[str, Any]:
+    if args.domain == "issue" and args.command == "init":
+        return init_contract(contract_path=args.contract, output=args.output)
+    if args.domain == "issue" and args.command == "append":
+        return append_issue_event(
+            event_path=args.event_file,
+            repo=args.repo,
+            issue_number=args.issue_number,
+            issue_url=args.issue_url,
+            confirmed=args.confirm_write,
+        )
     if args.domain == "issue" and args.command == "verify":
-        if bool(args.contract) == bool(args.body_file):
-            raise UsageError("provide exactly one of --contract or --body-file")
+        provided = [args.contract, args.body_file, args.events_file]
+        if sum(value is not None for value in provided) != 1:
+            raise UsageError("provide exactly one of --contract, --body-file, or --events-file")
+        if args.events_file is not None:
+            return verify_event_chain(load_event_chain(args.events_file))
         contract = load_contract(args.contract or args.body_file)
         return verify_contract(contract.to_dict())
     if args.domain == "issue" and args.command == "sync":
         return sync_contract(
             body_file=args.body_file,
+            cache=args.cache,
             repo=args.repo,
             issue_number=args.issue_number,
             issue_url=args.issue_url,
@@ -106,11 +161,22 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         )
     if args.domain == "bootstrap" and args.command == "plan":
         return bootstrap_plan(snapshot_path=args.snapshot, output=args.output)
+    if args.domain == "gate" and args.command == "static":
+        return static_check(Path(args.root).resolve())
+    if args.domain == "gate" and args.command == "github":
+        return gate_github(
+            repo=args.repo,
+            sha=args.sha,
+            workflow=args.workflow,
+            check_name=args.check_name,
+            app_id=args.app_id,
+            fixture=args.fixture,
+        )
     raise UsageError("unsupported command")
 
 
 def _error_report(exc: Exception) -> dict[str, Any]:
-    if isinstance(exc, (IssueCommandError, MigrationError, BootstrapError)):
+    if isinstance(exc, (IssueCommandError, MigrationError, BootstrapError, WorkflowCheckError, RemoteGateError)):
         return {"status": exc.status, "code": exc.code, "message": str(exc)}
     if isinstance(exc, UsageError):
         return {"status": "BLOCKED", "code": "INVALID_ARGUMENTS", "message": str(exc)}
