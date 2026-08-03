@@ -41,11 +41,3 @@ jobs:
         run: python -B -m tools.governance_v2 gate static --root .
       - name: Payload digest
         run: cat dist-candidate/template-advanced-1.0.0.digest.txt
-      - name: Provenance summary
-        run: >-
-          python -B -c "from pathlib import Path; print('candidate provenance: ' +
-          Path('dist-candidate/template-advanced-1.0.0.manifest.json').read_text(encoding='utf-8').splitlines()[0])"
-      - name: Release-set summary
-        run: >-
-          python -B -c "from pathlib import Path; print('candidate release set: ' +
-          ','.join(sorted(path.name for path in Path('dist-candidate').iterdir())))"

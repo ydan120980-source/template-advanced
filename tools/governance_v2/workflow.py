@@ -26,6 +26,9 @@ _USES_RE = re.compile(r"^\s*-\s*uses:\s*([^\s@]+)@([^\s#]+)", re.MULTILINE)
 _JOB_RE = re.compile(
     r"(?ms)^  ([A-Za-z0-9_-]+):\s*\n(.*?)(?=^  [A-Za-z0-9_-]+:\s*$|\Z)"
 )
+_NAMED_STEP_RE = re.compile(
+    r"(?ms)^[ ]{6,}- name:\s*([^\n]+)\n(.*?)(?=^[ ]{6,}- name:|\Z)"
+)
 
 
 def _read_workflow(root: Path, relative: str) -> str:
@@ -91,12 +94,24 @@ def _check_release_candidate(text: str, findings: list[str]) -> None:
         "Evals",
         "Workflow static check",
         "Payload digest",
-        "Provenance summary",
-        "Release-set summary",
     )
+    named_steps = {
+        name.strip(): body for name, body in _NAMED_STEP_RE.findall(text)
+    }
     for step in required_steps:
-        if f"name: {step}" not in text:
+        body = named_steps.get(step)
+        if body is None:
             findings.append(f"{relative}: required step {step!r} is missing")
+            continue
+        if not re.search(r"(?m)^\s+run:\s*\S", body):
+            findings.append(f"{relative}: required step {step!r} has no executable run")
+    payload_body = named_steps.get("Payload digest")
+    if payload_body is not None and not re.search(
+        r"dist-candidate/template-advanced-[^\s/]+\.digest\.txt", payload_body
+    ):
+        findings.append(f"{relative}: Payload digest step does not read a candidate digest")
+    if "READY_FOR_RELEASE" in text:
+        findings.append(f"{relative}: unsupported READY_FOR_RELEASE output is present")
 
 
 def static_check(root: Path | str) -> dict[str, Any]:

@@ -742,6 +742,253 @@ def _issue_comments_url(repo: str, issue_number: int) -> str:
     return _issue_api_url(repo, issue_number) + "/comments"
 
 
+def _issue_comments_page_url(repo: str, issue_number: int, page: int) -> str:
+    return _issue_comments_url(repo, issue_number) + "?" + urlencode(
+        {"per_page": 100, "page": page}
+    )
+
+
+def _fetch_issue_payload(
+    *,
+    repo: str,
+    issue_number: int,
+    token: str,
+    timeout: float,
+    opener: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
+    request = Request(
+        _issue_api_url(repo, issue_number),
+        headers=_github_headers(token),
+        method="GET",
+    )
+    payload, _ = _open_json(request, timeout=timeout, opener=opener)
+    if not isinstance(payload, dict):
+        raise IssueCommandError(
+            "Issue response is not a JSON object",
+            code="REMOTE_RESPONSE_INVALID",
+        )
+    return payload
+
+
+def _fetch_issue_comments(
+    *,
+    repo: str,
+    issue_number: int,
+    token: str,
+    timeout: float,
+    opener: Callable[..., Any] | None = None,
+) -> list[dict[str, Any]]:
+    comments: list[dict[str, Any]] = []
+    for page in range(1, _MAX_ISSUE_SEARCH_PAGES + 1):
+        request = Request(
+            _issue_comments_page_url(repo, issue_number, page),
+            headers=_github_headers(token),
+            method="GET",
+        )
+        payload, headers = _open_json(request, timeout=timeout, opener=opener)
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            raise IssueCommandError(
+                "Issue comments response is incomplete",
+                code="EVENT_CHAIN_READ_INCOMPLETE",
+            )
+        if len(payload) > 100:
+            raise IssueCommandError(
+                "Issue comments response exceeds the requested page size",
+                code="EVENT_CHAIN_READ_INCOMPLETE",
+            )
+        for comment in payload:
+            if not isinstance(comment.get("body"), str):
+                raise IssueCommandError(
+                    "Issue comment response has no string body",
+                    code="EVENT_CHAIN_READ_INCOMPLETE",
+                )
+        comments.extend(payload)
+        if _link_has_next(headers) or len(payload) == 100:
+            continue
+        return comments
+    raise IssueCommandError(
+        "Issue comments pagination exceeded the safe bound",
+        code="EVENT_CHAIN_READ_INCOMPLETE",
+    )
+
+
+def _events_from_comment_body(body: str) -> list[TaskEvent]:
+    candidates = re.findall(
+        r"```(?:json)?\s*\n?(\{.*?\})\s*```",
+        body,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if not candidates and body.lstrip().startswith("{"):
+        candidates = [body.strip()]
+    event_candidates: list[TaskEvent] = []
+    for candidate in candidates:
+        try:
+            raw = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(raw, dict):
+            continue
+        if not any(key in raw for key in ("event_digest", "event_id", "event_type")):
+            continue
+        try:
+            event_candidates.append(TaskEvent.from_dict(raw))
+        except (ContractError, TypeError, KeyError) as exc:
+            raise IssueCommandError(
+                f"Issue event comment is invalid: {exc}",
+                code="INVALID_EVENT",
+            ) from exc
+    if len(event_candidates) > 1:
+        raise IssueCommandError(
+            "Issue comment contains multiple event objects",
+            code="EVENT_COMMENT_AMBIGUOUS",
+        )
+    return event_candidates
+
+
+def _events_from_comments(comments: Iterable[dict[str, Any]]) -> list[TaskEvent]:
+    events: list[TaskEvent] = []
+    for comment in comments:
+        events.extend(_events_from_comment_body(comment["body"]))
+    return events
+
+
+def _validate_issue_for_append(
+    payload: dict[str, Any],
+    *,
+    repo: str,
+    event: TaskEvent,
+) -> TaskContract:
+    if payload.get("state") != "open":
+        raise IssueCommandError("Task Issue is not open", code="ISSUE_NOT_OPEN")
+    if _is_pull_request(payload):
+        raise IssueCommandError("Task Issue reference is a Pull Request", code="ISSUE_REFERENCE_IS_PR")
+    expected_title = f"[AIWF Task] {event.task_id}"
+    if payload.get("title") != expected_title:
+        raise IssueCommandError("Task Issue title does not match event task_id", code="ISSUE_TITLE_MISMATCH")
+    body = payload.get("body")
+    if not isinstance(body, str):
+        raise IssueCommandError("Task Issue has no string contract body", code="CONTRACT_READ_FAILED")
+    try:
+        contract = TaskContract.from_dict(extract_contract(body))
+    except (ContractError, IssueCommandError) as exc:
+        raise IssueCommandError("Task Issue contract is invalid", code="CONTRACT_READ_FAILED") from exc
+    if contract.data["task_id"] != event.task_id:
+        raise IssueCommandError("Task Issue contract task_id does not match event", code="EVENT_TASK_MISMATCH")
+    if contract.data["repository_id"] != repo:
+        raise IssueCommandError("Task Issue contract repository does not match", code="REPOSITORY_CONTRACT_MISMATCH")
+    return contract
+
+
+def _validate_existing_event_chain(
+    events: list[TaskEvent],
+    *,
+    contract: TaskContract,
+) -> str | None:
+    if not events:
+        return None
+    report = verify_event_chain(event.to_dict() for event in events)
+    if report["status"] != "PASS":
+        raise IssueCommandError(
+            f"existing Issue event chain is not valid: {report['code']}",
+            code=str(report["code"]),
+        )
+    if any(event.task_id != contract.data["task_id"] for event in events):
+        raise IssueCommandError(
+            "existing Issue event chain task_id does not match contract",
+            code="EVENT_TASK_MISMATCH",
+        )
+    return events[-1].event_digest
+
+
+def _validate_event_position(
+    event: TaskEvent,
+    *,
+    existing: list[TaskEvent],
+    contract: TaskContract,
+) -> None:
+    expected_sequence = len(existing) + 1
+    if event.sequence != expected_sequence:
+        code = "EVENT_CHAIN_GAP" if event.sequence > expected_sequence else "EVENT_CHAIN_OUT_OF_ORDER"
+        raise IssueCommandError(
+            f"event sequence must be {expected_sequence}",
+            code=code,
+        )
+    expected_previous = existing[-1].event_digest if existing else None
+    if event.previous_event_digest != expected_previous:
+        raise IssueCommandError(
+            "event previous_event_digest does not match the current chain head",
+            code="EVENT_PREVIOUS_DIGEST_MISMATCH",
+        )
+    if event.task_id != contract.data["task_id"]:
+        raise IssueCommandError(
+            "event task_id does not match the Task Issue contract",
+            code="EVENT_TASK_MISMATCH",
+        )
+    if existing and event.subject_sha != existing[0].subject_sha:
+        raise IssueCommandError(
+            "event subject_sha does not match the existing chain",
+            code="EVENT_SUBJECT_SHA_MISMATCH",
+        )
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", event.subject_sha):
+        raise IssueCommandError(
+            "event subject_sha is not a full SHA-1",
+            code="INVALID_EVENT_SUBJECT_SHA",
+        )
+
+
+def _validate_comment_readback(
+    payload: object,
+    *,
+    event: TaskEvent,
+    body: str,
+    comment_url: str,
+    actor: str,
+) -> dict[str, str | int]:
+    if not isinstance(payload, dict):
+        raise IssueCommandError("comment readback is not an object", code="EVENT_COMMENT_READBACK_MISMATCH")
+    comment_id = payload.get("id")
+    if isinstance(comment_id, bool) or not isinstance(comment_id, int) or comment_id < 1:
+        raise IssueCommandError("comment readback has no valid id", code="EVENT_COMMENT_READBACK_MISMATCH")
+    if payload.get("url") != comment_url or payload.get("body") != body:
+        raise IssueCommandError("comment readback URL or body does not match", code="EVENT_COMMENT_READBACK_MISMATCH")
+    user = payload.get("user")
+    if not isinstance(user, dict) or user.get("login") != actor:
+        raise IssueCommandError("comment readback author does not match", code="EVENT_COMMENT_READBACK_MISMATCH")
+    html_url = payload.get("html_url")
+    if not isinstance(html_url, str) or not html_url.strip():
+        raise IssueCommandError("comment readback has no HTML URL", code="EVENT_COMMENT_READBACK_MISMATCH")
+    try:
+        created_at = payload.get("created_at")
+        updated_at = payload.get("updated_at")
+        if not isinstance(created_at, str) or not isinstance(updated_at, str):
+            raise ValueError
+        if datetime.fromisoformat(created_at.replace("Z", "+00:00")).tzinfo is None:
+            raise ValueError
+        if datetime.fromisoformat(updated_at.replace("Z", "+00:00")).tzinfo is None:
+            raise ValueError
+    except (TypeError, ValueError) as exc:
+        raise IssueCommandError(
+            "comment readback timestamp is invalid",
+            code="EVENT_COMMENT_READBACK_MISMATCH",
+        ) from exc
+    try:
+        readback_events = _events_from_comment_body(body)
+    except IssueCommandError as exc:
+        raise IssueCommandError(
+            "comment readback event is invalid",
+            code="EVENT_COMMENT_READBACK_MISMATCH",
+        ) from exc
+    if len(readback_events) != 1 or readback_events[0].to_dict() != event.to_dict():
+        raise IssueCommandError("comment readback event digest does not match", code="EVENT_COMMENT_READBACK_MISMATCH")
+    return {
+        "comment_url": html_url,
+        "comment_api_url": comment_url,
+        "comment_id": comment_id,
+        "server_created_at": created_at,
+        "server_updated_at": updated_at,
+    }
+
+
 def append_issue_event(
     *,
     event_path: Path,
@@ -750,8 +997,9 @@ def append_issue_event(
     issue_url: str | None,
     confirmed: bool,
     timeout: float = 15.0,
+    opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Append one validated event as an Issue comment after explicit confirmation."""
+    """Append one event only after a verified pre-read and post-write reread."""
 
     event_raw = _read_json(event_path)
     try:
@@ -759,6 +1007,8 @@ def append_issue_event(
     except (ContractError, TypeError, KeyError) as exc:
         raise IssueCommandError(str(exc), status="FAIL", code="INVALID_EVENT") from exc
     require_write_confirmation(confirmed)
+    timeout = _validate_timeout(timeout)
+    token = _github_token()
 
     resolved_repo = repo
     resolved_number = issue_number
@@ -777,38 +1027,89 @@ def append_issue_event(
             "provide --repo with --issue-number or --issue-url",
             code="INPUT_REQUIRED",
         )
+    _repo_api_root(resolved_repo)
+    actor = _authenticated_actor(token=token, timeout=timeout, opener=opener)
+    issue_payload = _fetch_issue_payload(
+        repo=resolved_repo,
+        issue_number=resolved_number,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    contract = _validate_issue_for_append(issue_payload, repo=resolved_repo, event=event)
+    comments = _fetch_issue_comments(
+        repo=resolved_repo,
+        issue_number=resolved_number,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    existing_events = _events_from_comments(comments)
+    _validate_existing_event_chain(existing_events, contract=contract)
+    _validate_event_position(event, existing=existing_events, contract=contract)
     url = _issue_comments_url(resolved_repo, resolved_number)
     body = "```json\n" + json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True, indent=2) + "\n```\n"
     request = Request(
         url,
         data=json.dumps({"body": body}).encode("utf-8"),
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-            "User-Agent": "template-advanced-governance-v2",
-            **(
-                {"Authorization": f"Bearer {token}"}
-                if (token := os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
-                else {}
-            ),
-        },
+        headers=_github_headers(token, content_type=True),
         method="POST",
     )
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        raise IssueCommandError(f"GitHub API returned HTTP {exc.code}", code="REMOTE_API_ERROR") from exc
-    except (URLError, TimeoutError, OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise IssueCommandError(f"GitHub API unavailable: {type(exc).__name__}", code="REMOTE_API_UNAVAILABLE") from exc
+    payload, _ = _open_json(request, timeout=timeout, opener=opener)
     if not isinstance(payload, dict):
-        raise IssueCommandError("GitHub response is not a JSON object", code="REMOTE_RESPONSE_INVALID")
+        raise IssueCommandError("GitHub comment response is not a JSON object", code="REMOTE_RESPONSE_INVALID")
+    comment_api_url = payload.get("url")
+    if not isinstance(comment_api_url, str) or not comment_api_url.strip():
+        raise IssueCommandError("GitHub comment response has no API URL", code="REMOTE_RESPONSE_INVALID")
+    comment_request = Request(
+        comment_api_url,
+        headers=_github_headers(token),
+        method="GET",
+    )
+    comment_readback, _ = _open_json(comment_request, timeout=timeout, opener=opener)
+    verified_comment = _validate_comment_readback(
+        comment_readback,
+        event=event,
+        body=body,
+        comment_url=comment_api_url,
+        actor=actor,
+    )
+    final_issue_payload = _fetch_issue_payload(
+        repo=resolved_repo,
+        issue_number=resolved_number,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    final_contract = _validate_issue_for_append(final_issue_payload, repo=resolved_repo, event=event)
+    final_comments = _fetch_issue_comments(
+        repo=resolved_repo,
+        issue_number=resolved_number,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    final_events = _events_from_comments(final_comments)
+    _validate_existing_event_chain(final_events, contract=final_contract)
+    expected_digests = [item.event_digest for item in existing_events] + [event.event_digest]
+    if [item.event_digest for item in final_events] != expected_digests:
+        raise IssueCommandError(
+            "Issue event chain changed during append verification",
+            code="EVENT_CHAIN_READBACK_MISMATCH",
+        )
     return {
         "status": "PASS",
-        "code": "EVENT_APPENDED",
+        "code": "EVENT_APPENDED_AND_VERIFIED",
         "event_digest": event.event_digest,
-        "issue_url": issue_url or _issue_api_url(resolved_repo, resolved_number),
-        "comment_url": payload.get("html_url") or payload.get("url"),
+        "issue_url": _issue_api_url(resolved_repo, resolved_number),
+        "comment_url": verified_comment["comment_url"],
+        "comment_api_url": verified_comment["comment_api_url"],
+        "comment_id": verified_comment["comment_id"],
+        "author": actor,
+        "server_created_at": verified_comment["server_created_at"],
+        "server_updated_at": verified_comment["server_updated_at"],
+        "chain_head": final_events[-1].event_digest if final_events else None,
+        "remote_writes": True,
     }
 
 

@@ -27,7 +27,8 @@ remain runtime/reference documentation.
 Run Guard remains available for local path, retry, handoff, and diagnostic
 summaries. Its ledger is not the Task Issue and its local gate is not a global
 release qualification. A broken or missing Run Guard report cannot invalidate
-independently passed CI, Security, payload, provenance, or Remote Gate assets.
+independently passed CI, Security, payload, or Remote Gate assets; formal
+provenance belongs to the later release stage.
 
 PR A ends at a mandatory user review before squash merge, Bootstrap A,
 Bootstrap B, Release Freeze, or any remote protection/release action.
