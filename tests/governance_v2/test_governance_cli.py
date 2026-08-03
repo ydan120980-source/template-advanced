@@ -27,6 +27,44 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def create_git_fixture(root: Path) -> str:
+    """Create a local-only Git ref shape with origin/main but no head ref."""
+
+    def run_git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    root.mkdir(parents=True, exist_ok=True)
+    commands = [
+        ("init",),
+        ("config", "user.email", "governance-test@example.invalid"),
+        ("config", "user.name", "governance-test"),
+    ]
+    for command in commands:
+        result = run_git(*command)
+        if result.returncode != 0:
+            raise AssertionError(result.stderr)
+    seed = root / "seed.txt"
+    seed.write_text("seed\n", encoding="utf-8")
+    for command in (("add", "seed.txt"), ("commit", "-m", "seed")):
+        result = run_git(*command)
+        if result.returncode != 0:
+            raise AssertionError(result.stderr)
+    commit = run_git("rev-parse", "HEAD")
+    if commit.returncode != 0:
+        raise AssertionError(commit.stderr)
+    result = run_git("update-ref", "refs/remotes/origin/main", "HEAD")
+    if result.returncode != 0:
+        raise AssertionError(result.stderr)
+    return commit.stdout.strip()
+
+
 class CliTests(unittest.TestCase):
     def test_issue_verify_returns_pass_json(self) -> None:
         result = run_cli("issue", "verify", "--contract", str(FIXTURE))
@@ -122,6 +160,52 @@ class CliTests(unittest.TestCase):
         payload = json.loads(snapshot.stdout)
         self.assertEqual(payload["status"], "CACHED")
         self.assertEqual(payload["code"], "LOCAL_BASELINE_UNAVAILABLE")
+        self.assertFalse(payload["remote_writes"])
+
+    def test_snapshot_with_missing_ref_is_cached_and_writes_local_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "checkout"
+            commit = create_git_fixture(root)
+            output = root / "nested" / "snapshot.json"
+            snapshot = run_cli(
+                "bootstrap",
+                "snapshot",
+                "--root",
+                str(root),
+                "--output",
+                str(output),
+            )
+            self.assertEqual(snapshot.returncode, 3, snapshot.stderr)
+            payload = json.loads(snapshot.stdout)
+            self.assertEqual(payload["status"], "CACHED")
+            self.assertEqual(payload["code"], "LOCAL_BASELINE_INCOMPLETE")
+            self.assertEqual(payload["base_sha"], commit)
+            self.assertIsNone(payload["head_sha"])
+            self.assertEqual(payload["local_git_status"], "AVAILABLE")
+            self.assertEqual(payload["remote_fact_status"], "NOT_READ")
+            self.assertFalse(payload["remote_writes"])
+            self.assertTrue(output.exists())
+
+    def test_snapshot_with_missing_ref_and_expected_sha_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "checkout"
+            commit = create_git_fixture(root)
+            snapshot = run_cli(
+                "bootstrap",
+                "snapshot",
+                "--root",
+                str(root),
+                "--expected-base-sha",
+                commit,
+                "--expected-head-sha",
+                commit,
+            )
+        self.assertEqual(snapshot.returncode, 2, snapshot.stderr)
+        payload = json.loads(snapshot.stdout)
+        self.assertEqual(payload["status"], "BLOCKED")
+        self.assertEqual(payload["code"], "EXPECTED_REF_UNAVAILABLE")
+        self.assertEqual(payload["base_sha"], commit)
+        self.assertIsNone(payload["head_sha"])
         self.assertFalse(payload["remote_writes"])
 
 

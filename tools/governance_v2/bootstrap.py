@@ -38,6 +38,54 @@ def _git(root: Path, *args: str) -> str:
     return completed.stdout.decode("utf-8", "replace").strip()
 
 
+def _ref_candidates(ref: str) -> tuple[str, ...]:
+    """Return the full ref names that Git may resolve from a short ref."""
+
+    if ref.startswith("refs/"):
+        return (ref,)
+    return (
+        ref,
+        f"refs/heads/{ref}",
+        f"refs/remotes/{ref}",
+        f"refs/tags/{ref}",
+    )
+
+
+def _ref_exists(root: Path, ref: str) -> bool | None:
+    """Return whether a ref exists, or None when Git cannot be classified."""
+
+    for candidate in _ref_candidates(ref):
+        try:
+            completed = subprocess.run(
+                ["git", "show-ref", "--verify", "--quiet", candidate],
+                cwd=root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if completed.returncode == 0:
+            return True
+        if completed.returncode != 1:
+            return None
+    return False
+
+
+def _missing_refs(root: Path, refs: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Find unavailable refs without converting unrelated Git errors to cache."""
+
+    missing: list[str] = []
+    for ref in refs:
+        exists = _ref_exists(root, ref)
+        if exists is None:
+            return None
+        if not exists:
+            missing.append(ref)
+    return tuple(missing)
+
+
 def _write(path: Path, value: dict[str, Any]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,25 +157,81 @@ def snapshot(
                 "current_head_sha": None,
             }
     else:
-        base_sha = _git(root, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
-        head_sha = _git(root, "rev-parse", "--verify", f"{head_ref}^{{commit}}")
-        current_sha = _git(root, "rev-parse", "HEAD")
-        branch = _git(root, "branch", "--show-current")
-        if expected_base_sha and base_sha != expected_base_sha:
-            result = {"status": "BLOCKED", "code": "BASELINE_DRIFT", "expected_base_sha": expected_base_sha, "actual_base_sha": base_sha}
-        elif expected_head_sha and head_sha != expected_head_sha:
-            result = {"status": "BLOCKED", "code": "PR_HEAD_DRIFT", "expected_head_sha": expected_head_sha, "actual_head_sha": head_sha}
+        base_sha: str | None = None
+        head_sha: str | None = None
+        try:
+            base_sha = _git(root, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
+            head_sha = _git(root, "rev-parse", "--verify", f"{head_ref}^{{commit}}")
+        except BootstrapError as exc:
+            missing_refs = _missing_refs(root, (base_ref, head_ref))
+            if missing_refs:
+                missing = ", ".join(missing_refs)
+                if expected_base_sha or expected_head_sha:
+                    result = {
+                        **metadata,
+                        "status": "BLOCKED",
+                        "code": "EXPECTED_REF_UNAVAILABLE",
+                        "message": f"required local ref(s) unavailable: {missing}; {exc}",
+                        "local_git_status": "AVAILABLE",
+                        "base_sha": base_sha,
+                        "head_sha": head_sha,
+                        "current_branch": None,
+                        "current_head_sha": None,
+                    }
+                else:
+                    result = {
+                        **metadata,
+                        "status": "CACHED",
+                        "code": "LOCAL_BASELINE_INCOMPLETE",
+                        "message": f"required local ref(s) unavailable: {missing}; {exc}",
+                        "local_git_status": "AVAILABLE",
+                        "base_sha": base_sha,
+                        "head_sha": head_sha,
+                        "current_branch": None,
+                        "current_head_sha": None,
+                    }
+            else:
+                raise
         else:
-            result = {
-                **metadata,
-                "status": "CACHED",
-                "code": "LOCAL_BASELINE_ONLY",
-                "local_git_status": "AVAILABLE",
-                "base_sha": base_sha,
-                "head_sha": head_sha,
-                "current_branch": branch,
-                "current_head_sha": current_sha,
-            }
+            current_sha = _git(root, "rev-parse", "HEAD")
+            branch = _git(root, "branch", "--show-current")
+            if expected_base_sha and base_sha != expected_base_sha:
+                result = {
+                    **metadata,
+                    "status": "BLOCKED",
+                    "code": "BASELINE_DRIFT",
+                    "expected_base_sha": expected_base_sha,
+                    "actual_base_sha": base_sha,
+                    "local_git_status": "AVAILABLE",
+                    "base_sha": base_sha,
+                    "head_sha": head_sha,
+                    "current_branch": branch,
+                    "current_head_sha": current_sha,
+                }
+            elif expected_head_sha and head_sha != expected_head_sha:
+                result = {
+                    **metadata,
+                    "status": "BLOCKED",
+                    "code": "PR_HEAD_DRIFT",
+                    "expected_head_sha": expected_head_sha,
+                    "actual_head_sha": head_sha,
+                    "local_git_status": "AVAILABLE",
+                    "base_sha": base_sha,
+                    "head_sha": head_sha,
+                    "current_branch": branch,
+                    "current_head_sha": current_sha,
+                }
+            else:
+                result = {
+                    **metadata,
+                    "status": "CACHED",
+                    "code": "LOCAL_BASELINE_ONLY",
+                    "local_git_status": "AVAILABLE",
+                    "base_sha": base_sha,
+                    "head_sha": head_sha,
+                    "current_branch": branch,
+                    "current_head_sha": current_sha,
+                }
     result["snapshot_digest"] = sha256_canonical({key: value for key, value in result.items() if key != "snapshot_digest"})
     if output is not None:
         _write(output, result)
