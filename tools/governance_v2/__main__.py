@@ -12,6 +12,7 @@ from .bootstrap import BootstrapError, plan as bootstrap_plan, snapshot as boots
 from .issue import (
     IssueCommandError,
     append_issue_event,
+    create_issue,
     init_contract,
     load_contract,
     load_event_chain,
@@ -63,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
     init = issue_commands.add_parser("init")
     init.add_argument("--contract", required=True, type=_path)
     init.add_argument("--output", type=_path)
+    create = issue_commands.add_parser("create")
+    create.add_argument("--contract", required=True, type=_path)
+    create.add_argument("--repo", required=True)
+    create.add_argument("--title", required=True)
+    create.add_argument("--confirm-write", action="store_true")
+    create.add_argument("--timeout", type=float, default=15.0)
     append = issue_commands.add_parser("append")
     append.add_argument("--event-file", required=True, type=_path)
     append.add_argument("--repo")
@@ -115,6 +122,14 @@ def build_parser() -> argparse.ArgumentParser:
 def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.domain == "issue" and args.command == "init":
         return init_contract(contract_path=args.contract, output=args.output)
+    if args.domain == "issue" and args.command == "create":
+        return create_issue(
+            contract_path=args.contract,
+            repo=args.repo,
+            title=args.title,
+            confirmed=args.confirm_write,
+            timeout=args.timeout,
+        )
     if args.domain == "issue" and args.command == "append":
         return append_issue_event(
             event_path=args.event_file,

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from .canonical import sha256_canonical
@@ -23,6 +24,132 @@ class IssueCommandError(RuntimeError):
         super().__init__(message)
         self.status = status
         self.code = code
+
+
+_GITHUB_API_ROOT = "https://api.github.com"
+_GITHUB_API_VERSION = "2022-11-28"
+_DEFAULT_ISSUE_TIMEOUT = 15.0
+_MAX_ISSUE_SEARCH_PAGES = 1000
+
+
+def _validate_timeout(timeout: float) -> float:
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise IssueCommandError("timeout must be a finite positive number", code="INVALID_TIMEOUT")
+    value = float(timeout)
+    if not math.isfinite(value) or value <= 0:
+        raise IssueCommandError("timeout must be a finite positive number", code="INVALID_TIMEOUT")
+    return value
+
+
+def _github_token() -> str:
+    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+        value = os.environ.get(name)
+        if value and value.strip():
+            return value
+    raise IssueCommandError(
+        "a GitHub token is required through GH_TOKEN or GITHUB_TOKEN",
+        code="AUTH_TOKEN_REQUIRED",
+    )
+
+
+def _github_headers(token: str, *, content_type: bool = False) -> dict[str, str]:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "template-advanced-governance-v2",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": _GITHUB_API_VERSION,
+    }
+    if content_type:
+        headers["Content-Type"] = "application/json"
+    return headers
+
+
+def _repo_api_root(repo: str) -> str:
+    if not re.fullmatch(r"[^/\s]+/[^/\s]+", repo):
+        raise IssueCommandError("repository must be owner/name", code="INVALID_REPOSITORY")
+    return f"{_GITHUB_API_ROOT}/repos/{repo}"
+
+
+def _response_header(response: Any, name: str) -> str | None:
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    try:
+        items = headers.items()
+    except (AttributeError, TypeError):
+        return None
+    for key, value in items:
+        if str(key).lower() == name.lower():
+            return str(value)
+    return None
+
+
+def _open_json(
+    request: Request,
+    *,
+    timeout: float,
+    opener: Callable[..., Any] | None = None,
+) -> tuple[Any, dict[str, str]]:
+    """Open one GitHub JSON request without exposing credentials in errors."""
+
+    open_fn = opener or urlopen
+    try:
+        with open_fn(request, timeout=timeout) as response:
+            raw = response.read()
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8")
+            if not isinstance(raw, str):
+                raise IssueCommandError(
+                    "GitHub response body is not text",
+                    code="REMOTE_RESPONSE_INVALID",
+                )
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise IssueCommandError(
+                    "GitHub response is not valid JSON",
+                    code="REMOTE_RESPONSE_INVALID",
+                ) from exc
+            headers: dict[str, str] = {}
+            link = _response_header(response, "Link")
+            if link is not None:
+                headers["Link"] = link
+            return payload, headers
+    except IssueCommandError:
+        raise
+    except HTTPError as exc:
+        raise IssueCommandError(
+            f"GitHub API returned HTTP {exc.code}",
+            code="REMOTE_API_ERROR",
+        ) from exc
+    except (URLError, TimeoutError, OSError, UnicodeError) as exc:
+        raise IssueCommandError(
+            f"GitHub API unavailable: {type(exc).__name__}",
+            code="REMOTE_API_UNAVAILABLE",
+        ) from exc
+
+
+def _link_has_next(headers: dict[str, str]) -> bool:
+    link = headers.get("Link")
+    if not link:
+        return False
+    relations = re.findall(r"<[^>]*>\s*;\s*rel=\"?([^\";,\s]+)", link)
+    if not relations:
+        raise IssueCommandError(
+            "Issue search pagination metadata is incomplete",
+            code="ISSUE_SEARCH_INCOMPLETE",
+        )
+    return "next" in relations
+
+
+def _is_pull_request(payload: object) -> bool:
+    return isinstance(payload, dict) and payload.get("pull_request") is not None
+
+
+def _positive_issue_number(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return None
+    return value
 
 
 def _read_text(path: Path) -> str:
@@ -97,6 +224,367 @@ def _issue_api_url(repo: str, issue_number: int) -> str:
     if issue_number < 1:
         raise IssueCommandError("issue number must be positive", code="INVALID_ISSUE_NUMBER")
     return f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+
+
+def _issue_search_url(repo: str, page: int) -> str:
+    return _repo_api_root(repo) + "/issues?" + urlencode(
+        {"state": "all", "per_page": 100, "page": page}
+    )
+
+
+def _authenticated_actor(
+    *,
+    token: str,
+    timeout: float,
+    opener: Callable[..., Any] | None = None,
+) -> str:
+    request = Request(
+        _GITHUB_API_ROOT + "/user",
+        headers=_github_headers(token),
+        method="GET",
+    )
+    payload, _ = _open_json(request, timeout=timeout, opener=opener)
+    if not isinstance(payload, dict):
+        raise IssueCommandError(
+            "authenticated-user response is incomplete",
+            code="REMOTE_RESPONSE_INVALID",
+        )
+    user = payload.get("login")
+    if not isinstance(user, str) or not user.strip():
+        raise IssueCommandError(
+            "authenticated-user response has no login",
+            code="REMOTE_RESPONSE_INVALID",
+        )
+    return user
+
+
+def _search_exact_title(
+    *,
+    repo: str,
+    title: str,
+    token: str,
+    timeout: float,
+    opener: Callable[..., Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Search every Issue page and return exact-title non-PR matches."""
+
+    matches: list[dict[str, Any]] = []
+    for page in range(1, _MAX_ISSUE_SEARCH_PAGES + 1):
+        request = Request(
+            _issue_search_url(repo, page),
+            headers=_github_headers(token),
+            method="GET",
+        )
+        payload, headers = _open_json(request, timeout=timeout, opener=opener)
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            raise IssueCommandError(
+                "Issue search response is incomplete",
+                code="ISSUE_SEARCH_INCOMPLETE",
+            )
+        if len(payload) > 100:
+            raise IssueCommandError(
+                "Issue search response exceeds the requested page size",
+                code="ISSUE_SEARCH_INCOMPLETE",
+            )
+        matches.extend(
+            item
+            for item in payload
+            if item.get("title") == title and not _is_pull_request(item)
+        )
+        if _link_has_next(headers) or len(payload) == 100:
+            continue
+        return matches
+    raise IssueCommandError(
+        "Issue search exceeded the safe pagination bound",
+        code="ISSUE_SEARCH_INCOMPLETE",
+    )
+
+
+def _contract_matches_issue(payload: dict[str, Any], expected: TaskContract) -> bool:
+    body = payload.get("body")
+    if not isinstance(body, str):
+        return False
+    try:
+        actual = TaskContract.from_dict(extract_contract(body))
+    except (ContractError, IssueCommandError):
+        return False
+    return actual.to_dict() == expected.to_dict()
+
+
+def _issue_body(contract: TaskContract) -> str:
+    contract_json = json.dumps(
+        contract.to_dict(),
+        ensure_ascii=False,
+        sort_keys=True,
+        indent=2,
+    )
+    return (
+        "# Task Contract\n\n"
+        "```json\n"
+        f"{contract_json}\n"
+        "```\n\n"
+        "## Bootstrap provenance\n\n"
+        "* Created by: `python -m tools.governance_v2 issue create`\n"
+        "* Creation requires explicit `--confirm-write`.\n"
+        "* This Issue does not retroactively authorize commits created before its contract.\n"
+    )
+
+
+def _parse_server_timestamp(payload: dict[str, Any], field: str) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise IssueCommandError(
+            "Issue readback timestamp is missing",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise IssueCommandError(
+            "Issue readback timestamp is invalid",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        ) from exc
+    if parsed.tzinfo is None:
+        raise IssueCommandError(
+            "Issue readback timestamp has no timezone",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    return value
+
+
+def _validate_issue_readback(
+    payload: object,
+    *,
+    repo: str,
+    issue_number: int,
+    title: str,
+    contract: TaskContract,
+    actor: str,
+) -> dict[str, str]:
+    if not isinstance(payload, dict):
+        raise IssueCommandError(
+            "Issue readback is not an object",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    if _positive_issue_number(payload.get("number")) != issue_number:
+        raise IssueCommandError(
+            "Issue readback number does not match",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    if payload.get("title") != title:
+        raise IssueCommandError(
+            "Issue readback title does not match",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    if payload.get("state") != "open":
+        raise IssueCommandError(
+            "Issue readback is not open",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    if _is_pull_request(payload):
+        raise IssueCommandError(
+            "Issue readback is a Pull Request",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+
+    body = payload.get("body")
+    if not isinstance(body, str) or not _contract_matches_issue(payload, contract):
+        raise IssueCommandError(
+            "Issue readback contract does not match",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+
+    user = payload.get("user")
+    if not isinstance(user, dict) or user.get("login") != actor:
+        raise IssueCommandError(
+            "Issue readback author does not match authenticated actor",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+
+    expected_api_url = _issue_api_url(repo, issue_number)
+    expected_html_url = f"https://github.com/{repo}/issues/{issue_number}"
+    if payload.get("url") != expected_api_url:
+        raise IssueCommandError(
+            "Issue readback API URL does not match",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    if payload.get("html_url") != expected_html_url:
+        raise IssueCommandError(
+            "Issue readback HTML URL does not match",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+
+    repository_evidence: list[str] = []
+    repository_url = payload.get("repository_url")
+    if isinstance(repository_url, str):
+        repository_evidence.append(repository_url)
+    repository = payload.get("repository")
+    if isinstance(repository, dict) and isinstance(repository.get("full_name"), str):
+        repository_evidence.append(repository["full_name"])
+    if not repository_evidence or any(
+        value not in {repo, _repo_api_root(repo)} for value in repository_evidence
+    ):
+        raise IssueCommandError(
+            "Issue readback repository does not match",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+
+    created_at = _parse_server_timestamp(payload, "created_at")
+    updated_at = _parse_server_timestamp(payload, "updated_at")
+    return {
+        "issue_url": expected_html_url,
+        "api_url": expected_api_url,
+        "author": actor,
+        "server_created_at": created_at,
+        "server_updated_at": updated_at,
+    }
+
+
+def create_issue(
+    *,
+    contract_path: Path,
+    repo: str,
+    title: str,
+    confirmed: bool,
+    timeout: float = _DEFAULT_ISSUE_TIMEOUT,
+    opener: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
+    """Create one Task Issue safely, or verify an identical existing Issue."""
+
+    timeout = _validate_timeout(timeout)
+    try:
+        contract = load_contract(contract_path)
+    except IssueCommandError as exc:
+        # The create command's machine-readable result must never disclose a
+        # workstation path, even when the local input cannot be read.
+        if exc.code in {"READ_FAILED", "INVALID_JSON"}:
+            raise IssueCommandError(
+                "contract input could not be read or parsed",
+                status=exc.status,
+                code=exc.code,
+            ) from exc
+        raise
+    task_id = contract.data["task_id"]
+    if task_id == "GOV-V2-BOOTSTRAP":
+        raise IssueCommandError(
+            "the bootstrap Issue is never created by this command",
+            code="BOOTSTRAP_ISSUE_SELF_CREATION_FORBIDDEN",
+        )
+    _repo_api_root(repo)
+    if contract.data["repository_id"] != repo:
+        raise IssueCommandError(
+            "contract repository_id does not match --repo",
+            code="REPOSITORY_CONTRACT_MISMATCH",
+        )
+    if not isinstance(title, str) or not title.strip():
+        raise IssueCommandError("title is required", code="INVALID_TITLE")
+    expected_title = f"[AIWF Task] {task_id}"
+    if title != expected_title:
+        raise IssueCommandError(
+            "title must equal [AIWF Task] plus task_id",
+            code="INVALID_TITLE",
+        )
+    require_write_confirmation(confirmed)
+    token = _github_token()
+    body = _issue_body(contract)
+    actor = _authenticated_actor(token=token, timeout=timeout, opener=opener)
+    matches = _search_exact_title(
+        repo=repo,
+        title=title,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    if len(matches) > 1:
+        raise IssueCommandError(
+            "more than one exact-title Issue exists",
+            code="ISSUE_TITLE_AMBIGUOUS",
+        )
+
+    created = False
+    if matches:
+        existing = matches[0]
+        if not _contract_matches_issue(existing, contract):
+            raise IssueCommandError(
+                "an exact-title Issue has a different contract",
+                code="ISSUE_CONTRACT_CONFLICT",
+            )
+        issue_number = _positive_issue_number(existing.get("number"))
+        if issue_number is None:
+            raise IssueCommandError(
+                "exact-title Issue has no valid number",
+                code="ISSUE_SEARCH_INCOMPLETE",
+            )
+        result_code = "ISSUE_ALREADY_EXISTS"
+    else:
+        request = Request(
+            _repo_api_root(repo) + "/issues",
+            data=json.dumps(
+                {"title": title, "body": body},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            headers=_github_headers(token, content_type=True),
+            method="POST",
+        )
+        payload, _ = _open_json(request, timeout=timeout, opener=opener)
+        if not isinstance(payload, dict):
+            raise IssueCommandError(
+                "Issue create response is not an object",
+                code="ISSUE_CREATE_FAILED",
+            )
+        issue_number = _positive_issue_number(payload.get("number"))
+        if issue_number is None:
+            raise IssueCommandError(
+                "Issue create response has no valid number",
+                code="ISSUE_CREATE_FAILED",
+            )
+        result_code = "ISSUE_CREATED_AND_VERIFIED"
+        created = True
+
+    read_request = Request(
+        _issue_api_url(repo, issue_number),
+        headers=_github_headers(token),
+        method="GET",
+    )
+    read_payload, _ = _open_json(read_request, timeout=timeout, opener=opener)
+    verified = _validate_issue_readback(
+        read_payload,
+        repo=repo,
+        issue_number=issue_number,
+        title=title,
+        contract=contract,
+        actor=actor,
+    )
+    final_matches = _search_exact_title(
+        repo=repo,
+        title=title,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    if len(final_matches) != 1 or _positive_issue_number(final_matches[0].get("number")) != issue_number:
+        raise IssueCommandError(
+            "post-write exact-title search does not identify the verified Issue",
+            code="ISSUE_CREATE_READBACK_MISMATCH",
+        )
+    return {
+        "status": "PASS",
+        "code": result_code,
+        "created": created,
+        "repository": repo,
+        "issue_number": issue_number,
+        "issue_url": verified["issue_url"],
+        "api_url": verified["api_url"],
+        "title": title,
+        "task_id": task_id,
+        "contract_digest": contract.digest,
+        "author": verified["author"],
+        "server_created_at": verified["server_created_at"],
+        "server_updated_at": verified["server_updated_at"],
+        "duplicate_count": len(final_matches),
+        "remote_writes": created,
+    }
 
 
 def fetch_issue_body(*, repo: str, issue_number: int, timeout: float = 15.0) -> tuple[str, str]:
