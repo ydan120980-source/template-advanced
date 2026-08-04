@@ -8,14 +8,14 @@ and standard-library runtime.
 - Python 3.11 or newer (`py -3` is recommended on Windows; `python3` on macOS
   and Linux).
 - Bash; Git Bash is supported on Windows.
-- Git only when working from a real initialized clone. This source checkout may
-  not yet have a Git baseline.
+- Git when working from a real initialized clone; trusted release builds must
+  resolve every release file from a clean committed HEAD.
 
 No third-party Python package is required for the current tools or tests.
 
 ## Prepare A Change
 
-1. Read `AGENTS.md`, `docs/control/NEXT_CODEX_TASK.md`, and the relevant
+1. Read `AGENTS.md`, the active GitHub Task Issue, and the relevant
    architecture section.
 2. Keep the change inside the Task Packet's Allowed Paths and stop at any
    listed boundary.
@@ -35,7 +35,7 @@ bash scripts/verify.sh
 bash evals/run-evals.sh
 py -3 -B -m tools.template_doctor --root . --format json
 py -3 scripts/build-release.py
-py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json
+py -3 scripts/verify-release-archive.py --archive dist/template-advanced-2.0.0.zip --manifest dist/template-advanced-2.0.0.manifest.json --require-release-set
 ```
 
 `verify.sh` runs lint, the standard-library structural check (import and
@@ -54,8 +54,10 @@ workspace-write sandbox, network off); the `config.safe_defaults` Doctor rule
 enforces the contract at release time.
 
 The unit-test suite runs only fast, directed tests. The recursive full
-release validation runs in `scripts/integration-test-release.sh`; run it
-before any release build and whenever the release pipeline changes.
+release validation runs in `scripts/integration-test-release.sh`; it covers
+the deterministic double build, clean extraction, companion metadata, and
+corrupt-tree rejection. Run it before any release build and whenever the
+release pipeline changes.
 
 Before requesting review:
 

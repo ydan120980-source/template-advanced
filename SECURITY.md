@@ -64,8 +64,9 @@ Before trusting any downloaded release:
 
    ```bash
    python scripts/verify-release-archive.py \
-     --archive template-advanced-1.0.0.zip \
-     --manifest template-advanced-1.0.0.manifest.json \
+     --archive template-advanced-2.0.0.zip \
+     --manifest template-advanced-2.0.0.manifest.json \
+     --require-release-set \
      --validate
    ```
 

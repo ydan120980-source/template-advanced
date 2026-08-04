@@ -140,17 +140,18 @@ On Windows Git Bash, substitute `python3` with `py -3`. The PowerShell wrapper
 `scripts/aiwf-run-guard.ps1` discovers Python in the order `py -3`, `python`,
 `python3` and requires Python 3.11 or newer.
 
-The authoritative sprint plan remains `docs/control/NEXT_CODEX_TASK.md`;
-planning journals and Run Guard evidence cannot expand its scope or relax its
-stop conditions. See [AIWF Run Guard](docs/ai-workflow/AIWF_RUN_GUARD.md).
+The active GitHub Task Issue is the authoritative sprint contract; planning
+journals and Run Guard evidence cannot expand its scope or relax its stop
+conditions. See [AIWF Run Guard](docs/ai-workflow/AIWF_RUN_GUARD.md).
 
 ## Build A Release
 
 ```bash
 python3 scripts/build-release.py
 python3 scripts/verify-release-archive.py \
-  --archive dist/template-advanced-1.0.0.zip \
-  --manifest dist/template-advanced-1.0.0.manifest.json
+  --archive dist/template-advanced-2.0.0.zip \
+  --manifest dist/template-advanced-2.0.0.manifest.json \
+  --require-release-set
 ```
 
 On Windows Git Bash, substitute `python3` with `py -3`. The builder uses an
@@ -188,8 +189,8 @@ release artifacts.
 
 ## Verify A Downloaded Archive
 
-1. Download the ZIP, manifest, digest, and `SHA256SUMS` from the GitHub
-   Release.
+1. Download the ZIP, manifest, publication digest, payload digest, provenance,
+   release-set, and `SHA256SUMS` from the Draft/Published GitHub Release.
 2. Verify the checksums:
 
    ```bash
@@ -200,8 +201,9 @@ release artifacts.
 
    ```bash
    python3 scripts/verify-release-archive.py \
-     --archive template-advanced-1.0.0.zip \
-     --manifest template-advanced-1.0.0.manifest.json \
+     --archive template-advanced-2.0.0.zip \
+     --manifest template-advanced-2.0.0.manifest.json \
+     --require-release-set \
      --validate
    ```
 
@@ -213,11 +215,16 @@ release artifacts.
 
 ## Release Artifacts
 
-- `template-advanced-1.0.0.zip` — the deterministic release archive.
-- `template-advanced-1.0.0.manifest.json` — path, size, SHA-256, and mode for
+- `template-advanced-2.0.0.zip` — the deterministic release archive.
+- `template-advanced-2.0.0.manifest.json` — path, size, SHA-256, and mode for
   every file plus the publication digest.
-- `template-advanced-1.0.0.digest.txt` — the publication digest.
-- `SHA256SUMS` — SHA-256 of the three files above.
+- `template-advanced-2.0.0.digest.txt` — the publication digest.
+- `template-advanced-2.0.0.payload.digest.txt` — the archive-byte SHA-256.
+- `template-advanced-2.0.0.provenance.json` — source and companion-asset
+  provenance.
+- `template-advanced-2.0.0.release-set.json` — the non-self-referential
+  release-set digest and asset summary.
+- `SHA256SUMS` — SHA-256 of the six release assets above.
 
 ## Continuous Integration
 
@@ -227,7 +234,8 @@ The public repository runs three workflows:
   3.13; setup, unit tests, verify, evals, and the Doctor CI gate.
 - `release-artifacts.yml` — clean-commit release integration (double build,
   byte comparison, full clean-extraction validation), archive verification,
-  `SHA256SUMS`, and Release attachment on `v*` tags.
+  the release-set checksums, and Draft Release attachment on annotated `v*`
+  tags.
 - `security.yml` — CodeQL, credential scanning, and documentation
   local-path hygiene.
 

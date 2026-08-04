@@ -22,6 +22,7 @@ import unittest
 import warnings
 
 from tools.template_doctor.release_source import resolve_release_source
+from tools.template_doctor.release_inventory import RELEASE_VERSION
 
 
 # Name of a scratch file that is deliberately NOT a release candidate. It can
@@ -242,7 +243,7 @@ class ReleaseSourceGateTests(unittest.TestCase):
                 completed = _run_builder(root, out_dir)
                 self.assertEqual(completed.returncode, 0, completed.stderr)
 
-            stem = "template-advanced-1.0.0"
+            stem = f"template-advanced-{RELEASE_VERSION}"
             self.assertEqual(
                 (first / f"{stem}.zip").read_bytes(),
                 (second / f"{stem}.zip").read_bytes(),
