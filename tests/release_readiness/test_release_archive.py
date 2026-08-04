@@ -142,24 +142,40 @@ class ReleasePipelineTests(unittest.TestCase):
             second_digest = (second / f"{STEM}.digest.txt").read_text(
                 encoding="utf-8"
             ).strip()
+            artifact_names = (
+                f"{STEM}.zip",
+                f"{STEM}.manifest.json",
+                f"{STEM}.digest.txt",
+                f"{STEM}.payload.digest.txt",
+                f"{STEM}.provenance.json",
+                f"{STEM}.release-set.json",
+                "SHA256SUMS",
+            )
+            first_artifacts = {
+                name: (first / name).read_bytes() for name in artifact_names
+            }
+            second_artifacts = {
+                name: (second / name).read_bytes() for name in artifact_names
+            }
+            payload_digest = (first / f"{STEM}.payload.digest.txt").read_text(
+                encoding="ascii"
+            ).strip()
+            provenance = json.loads(
+                (first / f"{STEM}.provenance.json").read_text(encoding="utf-8")
+            )
+            release_set = json.loads(
+                (first / f"{STEM}.release-set.json").read_text(encoding="utf-8")
+            )
+            checksums = (first / "SHA256SUMS").read_text(encoding="ascii").splitlines()
 
         self.assertEqual(first_manifest, second_manifest)
         self.assertEqual(first_zip, second_zip)
         self.assertEqual(first_digest_bytes, second_digest_bytes)
         self.assertEqual(first_digest, second_digest)
-        artifact_names = (
-            f"{STEM}.zip",
-            f"{STEM}.manifest.json",
-            f"{STEM}.digest.txt",
-            f"{STEM}.payload.digest.txt",
-            f"{STEM}.provenance.json",
-            f"{STEM}.release-set.json",
-            "SHA256SUMS",
-        )
         for name in artifact_names:
             self.assertEqual(
-                (first / name).read_bytes(),
-                (second / name).read_bytes(),
+                first_artifacts[name],
+                second_artifacts[name],
                 name,
             )
         self.assertNotIn(b"\r\n", first_manifest)
@@ -169,13 +185,7 @@ class ReleasePipelineTests(unittest.TestCase):
         manifest = json.loads(first_manifest)
         self.assertEqual(manifest["file_count"], len(manifest["files"]))
         self.assertEqual(manifest["publication_digest"], first_digest)
-        payload_digest = (first / f"{STEM}.payload.digest.txt").read_text(
-            encoding="ascii"
-        ).strip()
         self.assertEqual(payload_digest, hashlib.sha256(first_zip).hexdigest())
-        provenance = json.loads(
-            (first / f"{STEM}.provenance.json").read_text(encoding="utf-8")
-        )
         self.assertEqual(provenance["version"], RELEASE_VERSION)
         self.assertEqual(
             set(provenance["assets"]),
@@ -185,9 +195,6 @@ class ReleasePipelineTests(unittest.TestCase):
                 f"{STEM}.digest.txt",
                 f"{STEM}.payload.digest.txt",
             },
-        )
-        release_set = json.loads(
-            (first / f"{STEM}.release-set.json").read_text(encoding="utf-8")
         )
         release_set_body = {
             key: value
@@ -201,7 +208,6 @@ class ReleasePipelineTests(unittest.TestCase):
             release_set["release_set_digest"],
             hashlib.sha256(release_set_canonical).hexdigest(),
         )
-        checksums = (first / "SHA256SUMS").read_text(encoding="ascii").splitlines()
         self.assertEqual(len(checksums), 6)
         paths = [entry["path"] for entry in manifest["files"]]
         self.assertEqual(paths, sorted(paths))
