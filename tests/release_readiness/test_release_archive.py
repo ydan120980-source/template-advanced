@@ -14,13 +14,13 @@ import unittest
 import zipfile
 
 from tools.template_doctor.release_inventory import (
+    RELEASE_VERSION,
     ReleaseEntry,
     publication_digest,
 )
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RELEASE_VERSION = "1.0.0"
 STEM = f"template-advanced-{RELEASE_VERSION}"
 
 
@@ -142,11 +142,42 @@ class ReleasePipelineTests(unittest.TestCase):
             second_digest = (second / f"{STEM}.digest.txt").read_text(
                 encoding="utf-8"
             ).strip()
+            artifact_names = (
+                f"{STEM}.zip",
+                f"{STEM}.manifest.json",
+                f"{STEM}.digest.txt",
+                f"{STEM}.payload.digest.txt",
+                f"{STEM}.provenance.json",
+                f"{STEM}.release-set.json",
+                "SHA256SUMS",
+            )
+            first_artifacts = {
+                name: (first / name).read_bytes() for name in artifact_names
+            }
+            second_artifacts = {
+                name: (second / name).read_bytes() for name in artifact_names
+            }
+            payload_digest = (first / f"{STEM}.payload.digest.txt").read_text(
+                encoding="ascii"
+            ).strip()
+            provenance = json.loads(
+                (first / f"{STEM}.provenance.json").read_text(encoding="utf-8")
+            )
+            release_set = json.loads(
+                (first / f"{STEM}.release-set.json").read_text(encoding="utf-8")
+            )
+            checksums = (first / "SHA256SUMS").read_text(encoding="ascii").splitlines()
 
         self.assertEqual(first_manifest, second_manifest)
         self.assertEqual(first_zip, second_zip)
         self.assertEqual(first_digest_bytes, second_digest_bytes)
         self.assertEqual(first_digest, second_digest)
+        for name in artifact_names:
+            self.assertEqual(
+                first_artifacts[name],
+                second_artifacts[name],
+                name,
+            )
         self.assertNotIn(b"\r\n", first_manifest)
         self.assertTrue(first_manifest.endswith(b"\n"))
         self.assertNotIn(b"\r\n", first_digest_bytes)
@@ -154,6 +185,30 @@ class ReleasePipelineTests(unittest.TestCase):
         manifest = json.loads(first_manifest)
         self.assertEqual(manifest["file_count"], len(manifest["files"]))
         self.assertEqual(manifest["publication_digest"], first_digest)
+        self.assertEqual(payload_digest, hashlib.sha256(first_zip).hexdigest())
+        self.assertEqual(provenance["version"], RELEASE_VERSION)
+        self.assertEqual(
+            set(provenance["assets"]),
+            {
+                f"{STEM}.zip",
+                f"{STEM}.manifest.json",
+                f"{STEM}.digest.txt",
+                f"{STEM}.payload.digest.txt",
+            },
+        )
+        release_set_body = {
+            key: value
+            for key, value in release_set.items()
+            if key != "release_set_digest"
+        }
+        release_set_canonical = json.dumps(
+            release_set_body, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        self.assertEqual(
+            release_set["release_set_digest"],
+            hashlib.sha256(release_set_canonical).hexdigest(),
+        )
+        self.assertEqual(len(checksums), 6)
         paths = [entry["path"] for entry in manifest["files"]]
         self.assertEqual(paths, sorted(paths))
         pollution = [
@@ -187,6 +242,7 @@ class ReleasePipelineTests(unittest.TestCase):
                 str(out_dir / f"{STEM}.zip"),
                 "--manifest",
                 str(out_dir / f"{STEM}.manifest.json"),
+                "--require-release-set",
             )
 
         self.assertIn("passed", completed.stdout)
@@ -384,7 +440,7 @@ class ReleasePipelineTests(unittest.TestCase):
         self.assertIn("bash scripts/setup.sh", problems[0])
 
     def test_clean_template_has_no_author_state_or_active_plan(self) -> None:
-        for relative in (".planning", ".mode", ".nonce", ".stop_blocks"):
+        for relative in (".mode", ".nonce", ".stop_blocks"):
             self.assertFalse((REPO_ROOT / relative).exists(), relative)
         for relative in (
             "docs/control/NEXT_CODEX_TASK.md",

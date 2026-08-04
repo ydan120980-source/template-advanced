@@ -54,11 +54,12 @@ import zipfile
 from pathlib import Path
 
 from tools.aiwf_run_guard.procutil import ProcessResult, run_process_tree
+from tools.template_doctor.release_inventory import RELEASE_VERSION
 
 
 ROOT = Path(sys.argv[1]).resolve()  # work dir
 REPO = Path.cwd().resolve()
-STEM = "template-advanced-1.0.0"
+STEM = f"template-advanced-{RELEASE_VERSION}"
 MAX_OUTPUT_CHARS = 4000
 BUILD_TIMEOUT_SECONDS = 120
 BASIC_VALIDATION_TIMEOUT_SECONDS = 120
@@ -295,7 +296,15 @@ if first_manifest["source"]["type"] != "git-commit":
         f"unexpected source {first_manifest['source']}",
     )
 
-artifact_names = (f"{STEM}.zip", f"{STEM}.manifest.json", f"{STEM}.digest.txt")
+artifact_names = (
+    f"{STEM}.zip",
+    f"{STEM}.manifest.json",
+    f"{STEM}.digest.txt",
+    f"{STEM}.payload.digest.txt",
+    f"{STEM}.provenance.json",
+    f"{STEM}.release-set.json",
+    "SHA256SUMS",
+)
 compare_artifacts("build-b", first_dir, second_dir, artifact_names)
 compare_artifacts("clean-head-rebuild", first_dir, clean_head_dir, artifact_names)
 print("integration-test-release: double build byte-identical")
@@ -309,6 +318,7 @@ basic_command = [
     str(first_dir / f"{STEM}.zip"),
     "--manifest",
     str(first_dir / f"{STEM}.manifest.json"),
+    "--require-release-set",
 ]
 basic = run_stage(
     "basic-archive-validation",
@@ -331,6 +341,7 @@ full_command = [
     "--manifest",
     str(first_dir / f"{STEM}.manifest.json"),
     "--validate",
+    "--require-release-set",
 ]
 validate = run_python(
     "full-archive-validation",
@@ -364,6 +375,7 @@ corrupt_command = [
     "--validate",
     "--extract-dir",
     str(extract),
+    "--require-release-set",
 ]
 rejected = run_python(
     "corrupt-codegraph-rejection",

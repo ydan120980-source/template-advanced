@@ -6,11 +6,14 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  build-and-verify:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -19,17 +22,27 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
-      - name: Tag and project version agree
+      - name: Resolve project version
+        run: |
+          set -euo pipefail
+          version="$(python -B -c 'import sys; sys.path.insert(0, "."); from tools.project_version import PROJECT_VERSION; print(PROJECT_VERSION)')"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_STEM=template-advanced-$version" >> "$GITHUB_ENV"
+      - name: Annotated tag and project version agree
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           set -euo pipefail
-          expected="v$(python -B -c 'import sys; sys.path.insert(0, "."); from tools.template_doctor.release_inventory import RELEASE_VERSION; print(RELEASE_VERSION)')"
+          expected="v$RELEASE_VERSION"
           if [ "$GITHUB_REF_NAME" != "$expected" ]; then
-            echo "tag ${GITHUB_REF_NAME} does not match project version ${expected}" >&2
+            echo "tag $GITHUB_REF_NAME does not match project version $expected" >&2
+            exit 1
+          fi
+          if [ "$(git cat-file -t "$GITHUB_REF^{tag}" 2>/dev/null || true)" != "tag" ]; then
+            echo "release tag $GITHUB_REF_NAME is not annotated" >&2
             exit 1
           fi
       - name: Unit tests
-        run: python -m unittest discover -s tests
+        run: python -B -m unittest discover -s tests
       - name: Verify
         run: bash scripts/verify.sh
       - name: Evals
@@ -37,88 +50,99 @@ jobs:
       - name: Release integration (double build, clean --validate, corrupt rejection)
         run: bash scripts/integration-test-release.sh
       - name: Build canonical release
+        run: python -B scripts/build-release.py --version "$RELEASE_VERSION" --out-dir dist
+      - name: Verify archive and three-layer release metadata
+        run: >-
+          python -B scripts/verify-release-archive.py
+          --archive "dist/$RELEASE_STEM.zip"
+          --manifest "dist/$RELEASE_STEM.manifest.json"
+          --require-release-set
+          --validate
+      - name: Verify outer checksums
         run: |
-          mkdir -p dist
-          python scripts/build-release.py --out-dir dist
-      - name: Verify archive with clean extraction
-        run: python scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json --validate
-      - name: Generate SHA256SUMS
-        run: |
-          cd dist
-          sha256sum template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt > SHA256SUMS
-          cat SHA256SUMS
+          set -euo pipefail
+          (cd dist && sha256sum -c SHA256SUMS)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-assets
-          path: |
-            dist/template-advanced-1.0.0.zip
-            dist/template-advanced-1.0.0.manifest.json
-            dist/template-advanced-1.0.0.digest.txt
-            dist/SHA256SUMS
+          path: dist
           if-no-files-found: error
-      - name: Attach assets to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+
+  publish-draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-verify
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - name: Resolve project version
+        run: |
+          set -euo pipefail
+          version="$(python -B -c 'import sys; sys.path.insert(0, "."); from tools.project_version import PROJECT_VERSION; print(PROJECT_VERSION)')"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_STEM=template-advanced-$version" >> "$GITHUB_ENV"
+      - name: Download verified build artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          cd dist
-          zip_sha=$(sha256sum template-advanced-1.0.0.zip | cut -d' ' -f1)
-          manifest_sha=$(sha256sum template-advanced-1.0.0.manifest.json | cut -d' ' -f1)
-          digest_sha=$(sha256sum template-advanced-1.0.0.digest.txt | cut -d' ' -f1)
-          digest_value=$(cat template-advanced-1.0.0.digest.txt)
-          notes=$(cat <<EOF
-          # template-advanced ${GITHUB_REF_NAME}
-
-          Deterministic, evidence-driven engineering template for AI coding agents and Codex workflows.
-
-          ## Highlights
-
-          - Deterministic release builds (fixed timestamps, explicit modes, stable sorting)
-          - Cross-platform validation on Ubuntu, Windows, and macOS
-          - AIWF Run Guard evidence lifecycle
-          - Template Doctor readiness and drift detection
-          - Clean release archive validation in an extracted directory
-          - Evidence-driven control documents
-
-          ## Validation
-
-          CI matrix: Ubuntu, Windows, macOS x Python 3.11, 3.12, 3.13. Unit tests, verify, evals, and the Doctor CI gate pass for the release tag.
-
-          ## Artifacts
-
-          - ZIP: deterministic release archive
-          - Manifest: path, size, SHA-256, mode, and publication digest per file
-          - Digest: publication digest
-          - SHA256SUMS: checksums of the three files above
-
-          ## Verification
-
-          ZIP SHA-256: ${zip_sha}
-          Manifest SHA-256: ${manifest_sha}
-          Digest file SHA-256: ${digest_sha}
-          Publication digest: ${digest_value}
-
-          Verify locally with:
-
-          sha256sum -c SHA256SUMS
-          python scripts/verify-release-archive.py --archive template-advanced-1.0.0.zip --manifest template-advanced-1.0.0.manifest.json --validate
-
-          ## Known limitations
-
-          - CodeGraph is an optional maintainer capability; no index is committed.
-          - External global Codex configuration is outside project control.
-          - Some GitHub security features depend on repository permissions.
-
-          ## License
-
-          Apache License 2.0
-          EOF
-          )
-          gh release create "$GITHUB_REF_NAME" \
-            template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt SHA256SUMS \
-            --title "template-advanced ${GITHUB_REF_NAME}" \
-            --notes "$notes" \
-            || gh release upload "$GITHUB_REF_NAME" \
-              template-advanced-1.0.0.zip template-advanced-1.0.0.manifest.json template-advanced-1.0.0.digest.txt SHA256SUMS \
-              --clobber
+          mkdir -p dist
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name release-assets --dir dist
+      - name: Verify downloaded checksums and archive before publication
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c SHA256SUMS)
+          python -B scripts/verify-release-archive.py \
+            --archive "dist/$RELEASE_STEM.zip" \
+            --manifest "dist/$RELEASE_STEM.manifest.json" \
+            --require-release-set \
+            --validate
+      - name: Create or update Draft Release without clobbering assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            is_draft="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+            if [ "$is_draft" != "true" ]; then
+              echo "existing release $GITHUB_REF_NAME is not a Draft Release; refusing to mutate it" >&2
+              exit 1
+            fi
+            gh release edit "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft \
+              --title "template-advanced $GITHUB_REF_NAME" \
+              --notes "Verified draft candidate for $GITHUB_REF_NAME. Assets are deterministic and have passed the release-set verifier."
+            gh release upload "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              "dist/$RELEASE_STEM.zip" \
+              "dist/$RELEASE_STEM.manifest.json" \
+              "dist/$RELEASE_STEM.digest.txt" \
+              "dist/$RELEASE_STEM.payload.digest.txt" \
+              "dist/$RELEASE_STEM.provenance.json" \
+              "dist/$RELEASE_STEM.release-set.json" \
+              dist/SHA256SUMS
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft \
+              --verify-tag \
+              --title "template-advanced $GITHUB_REF_NAME" \
+              --notes "Verified draft candidate for $GITHUB_REF_NAME. Assets are deterministic and have passed the release-set verifier." \
+              "dist/$RELEASE_STEM.zip" \
+              "dist/$RELEASE_STEM.manifest.json" \
+              "dist/$RELEASE_STEM.digest.txt" \
+              "dist/$RELEASE_STEM.payload.digest.txt" \
+              "dist/$RELEASE_STEM.provenance.json" \
+              "dist/$RELEASE_STEM.release-set.json" \
+              dist/SHA256SUMS
+          fi

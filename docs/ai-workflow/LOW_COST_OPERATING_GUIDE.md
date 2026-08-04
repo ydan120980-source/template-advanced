@@ -21,29 +21,28 @@
 真实项目里建议固定使用一个执行入口：
 
 ```text
-docs/control/NEXT_CODEX_TASK.md
+GitHub Task Issue + validated offline cache
 ```
 
-Web GPT 每轮只负责更新这个任务包。Codex 每轮只执行这个任务包。这样可以避免上下文散落在聊天记录里。
+任务 Issue 是长期规划权威；离线缓存只保存可审计证据，不能扩大范围或放宽停止条件。Codex 每轮只执行当前已验证的合同，这样可以避免上下文散落在聊天记录里。
 
 最小文件组合：
 
 ```text
-docs/control/
-  CURRENT_PROJECT_STATE.md
-  NEXT_CODEX_TASK.md
-  SPRINT_LEDGER.md
+.aiwf/cache/<task-id>/
+  <verified-contract>.json
+  events/
 ```
 
 推荐完整组合：
 
 ```text
-docs/control/
-  CURRENT_PROJECT_STATE.md
-  SPRINT_LEDGER.md
-  CHATGPT_HANDOFF.md
-  NEXT_CODEX_TASK.md
-  CODEX_RUNTIME_PROFILE.md
+.aiwf/cache/<task-id>/
+  contract.json
+  events/
+  evidence-ledger.md
+.aiwf/runs/<run-id>/
+  local diagnostics
 ```
 
 ## 3. Web GPT 总控提示词
@@ -54,9 +53,9 @@ docs/control/
 你是本项目的 Web GPT / cloud controller。
 
 请读取：
-- docs/control/CURRENT_PROJECT_STATE.md
-- docs/control/SPRINT_LEDGER.md 中最近一轮结果
-- 必要时读取 docs/control/CHATGPT_HANDOFF.md
+- 当前 GitHub Task Issue 及其治理 v2 合同
+- 必要时读取已验证的 `.aiwf/cache/<task-id>/` 证据
+- 读取任务指定的架构和验证文档
 
 你的任务：
 1. 判断当前最高价值的 bounded sprint。
@@ -64,7 +63,7 @@ docs/control/
 3. 如果 Outcome Impact + Project Value < 7，不要生成实现任务，改为 closeout / context fill / switch axis。
 4. 如果 Verification Confidence <= 2，生成 preflight / read-only probe，不要生成实现任务。
 5. 如果 Boundary Risk >= 4，缩小范围或升级为 Full + reviewer。
-6. 生成一份可直接写入 docs/control/NEXT_CODEX_TASK.md 的任务包。
+6. 生成一份可直接交给 Codex 执行的有界 Task Packet；不要创建第二个规划权威。
 
 任务包必须包含：
 - Goal
@@ -84,7 +83,7 @@ docs/control/
 每轮交给 Codex 时使用：
 
 ```text
-Read AGENTS.md and docs/control/NEXT_CODEX_TASK.md.
+Read AGENTS.md and the current GitHub Task Issue.
 
 Execute only the task packet.
 Respect Workflow Mode, Allowed Paths, Forbidden Paths, Budget, and Stop Conditions.
@@ -183,8 +182,7 @@ Workflow Mode: Standard
 
 ## Required Reading
 - AGENTS.md
-- docs/control/CURRENT_PROJECT_STATE.md
-- docs/control/CODEX_RUNTIME_PROFILE.md
+- the verified Task Issue contract and any task-specific cache
 - <task-specific files>
 
 ## Allowed Paths

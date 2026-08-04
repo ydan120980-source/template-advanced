@@ -3,12 +3,13 @@
 
 Usage (from the repository root):
 
-    py -3 scripts/verify-release-archive.py --archive dist/template-advanced-1.0.0.zip --manifest dist/template-advanced-1.0.0.manifest.json
+    py -3 scripts/verify-release-archive.py --archive dist/template-advanced-2.0.0.zip --manifest dist/template-advanced-2.0.0.manifest.json
 
 Optional:
 
     --extract-dir <dir>   extract the archive to an existing empty directory
     --validate            after extraction, run setup/verify/eval/doctor/preflight
+    --require-release-set require the v2 provenance/release-set artifacts
 
 Checks:
 
@@ -56,6 +57,8 @@ from tools.template_doctor.release_inventory import (  # noqa: E402
 
 
 MANIFEST_SCHEMA = "template-advanced/release-manifest/v1"
+PROVENANCE_SCHEMA = "template-advanced/release-provenance/v1"
+RELEASE_SET_SCHEMA = "template-advanced/release-set/v1"
 
 FORBIDDEN_PATH_FRAGMENTS = (
     ".active_plan",
@@ -122,6 +125,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--extract-dir")
     parser.add_argument("--validate", action="store_true")
+    parser.add_argument(
+        "--require-release-set",
+        action="store_true",
+        help="require and verify payload, provenance, release-set, and SHA256SUMS assets",
+    )
     return parser
 
 
@@ -206,6 +214,142 @@ def _doc_exec_bit_scan(archive: zipfile.ZipFile) -> list[str]:
         for pattern in EXEC_BIT_DOC_PATTERNS:
             if pattern.search(text):
                 problems.append(f"{name}: exec-bit-dependent invocation {pattern.pattern}")
+    return problems
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _read_json_file(path: Path) -> dict[str, object]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path.name} must contain a JSON object")
+    return raw
+
+
+def _release_set_digest(body: dict[str, object]) -> str:
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _verify_companion_artifacts(
+    archive_path: Path,
+    manifest_path: Path,
+    manifest: dict[str, object],
+    *,
+    require: bool,
+) -> list[str]:
+    """Verify the v2 three-layer metadata without self-referential hashes."""
+
+    stem = archive_path.stem
+    companions = {
+        "payload_digest": archive_path.with_name(f"{stem}.payload.digest.txt"),
+        "provenance": archive_path.with_name(f"{stem}.provenance.json"),
+        "release_set": archive_path.with_name(f"{stem}.release-set.json"),
+        "checksums": archive_path.with_name("SHA256SUMS"),
+    }
+    present = [path.exists() for path in companions.values()]
+    if not any(present):
+        return ["v2 release-set artifacts are missing"] if require else []
+    if not all(present):
+        missing = [path.name for path in companions.values() if not path.is_file()]
+        return ["incomplete v2 release-set artifacts: " + ", ".join(missing)]
+
+    problems: list[str] = []
+    expected_version = manifest.get("version")
+    if expected_version != "2.0.0":
+        problems.append(f"release-set version is not 2.0.0: {expected_version!r}")
+
+    payload_digest_path = companions["payload_digest"]
+    payload_digest = payload_digest_path.read_text(encoding="ascii").strip()
+    archive_digest = _sha256_file(archive_path)
+    if payload_digest != archive_digest:
+        problems.append("payload digest does not match archive bytes")
+
+    provenance_path = companions["provenance"]
+    provenance = _read_json_file(provenance_path)
+    if provenance.get("schema") != PROVENANCE_SCHEMA:
+        problems.append("unsupported provenance schema")
+    if provenance.get("version") != expected_version:
+        problems.append("provenance version does not match manifest")
+    provenance_assets = provenance.get("assets")
+    if not isinstance(provenance_assets, dict):
+        problems.append("provenance assets are missing")
+    else:
+        expected_assets = {
+            archive_path.name: _sha256_file(archive_path),
+            manifest_path.name: _sha256_file(manifest_path),
+            manifest_path.with_name(f"{stem}.digest.txt").name: _sha256_file(
+                manifest_path.with_name(f"{stem}.digest.txt")
+            ),
+            payload_digest_path.name: _sha256_file(payload_digest_path),
+        }
+        for name, digest in expected_assets.items():
+            item = provenance_assets.get(name)
+            if not isinstance(item, dict) or item.get("sha256") != digest:
+                problems.append(f"provenance asset mismatch: {name}")
+
+    release_set_path = companions["release_set"]
+    release_set = _read_json_file(release_set_path)
+    if release_set.get("schema") != RELEASE_SET_SCHEMA:
+        problems.append("unsupported release-set schema")
+    if release_set.get("version") != expected_version:
+        problems.append("release-set version does not match manifest")
+    release_assets = release_set.get("assets")
+    if not isinstance(release_assets, list) or not all(isinstance(item, dict) for item in release_assets):
+        problems.append("release-set assets are missing or invalid")
+    else:
+        body = {key: value for key, value in release_set.items() if key != "release_set_digest"}
+        expected_release_set_digest = _release_set_digest(body)
+        if release_set.get("release_set_digest") != expected_release_set_digest:
+            problems.append("release-set digest is self-inconsistent")
+        expected_names = {
+            archive_path.name,
+            manifest_path.name,
+            manifest_path.with_name(f"{stem}.digest.txt").name,
+            payload_digest_path.name,
+            provenance_path.name,
+        }
+        actual_names = {item.get("name") for item in release_assets}
+        if actual_names != expected_names:
+            problems.append("release-set asset names are incomplete or unexpected")
+        for item in release_assets:
+            name = item.get("name")
+            if not isinstance(name, str):
+                continue
+            path = archive_path.with_name(name)
+            if not path.is_file() or item.get("sha256") != _sha256_file(path):
+                problems.append(f"release-set asset mismatch: {name}")
+
+    checksum_lines = companions["checksums"].read_text(encoding="ascii").splitlines()
+    checksum_map: dict[str, str] = {}
+    for line in checksum_lines:
+        if not line.strip():
+            continue
+        match = re.fullmatch(r"([0-9a-fA-F]{64})  (.+)", line)
+        if not match:
+            problems.append(f"invalid SHA256SUMS line: {line}")
+            continue
+        checksum_map[match.group(2)] = match.group(1).lower()
+    expected_checksum_names = {
+        archive_path.name,
+        manifest_path.name,
+        manifest_path.with_name(f"{stem}.digest.txt").name,
+        payload_digest_path.name,
+        provenance_path.name,
+        release_set_path.name,
+    }
+    if set(checksum_map) != expected_checksum_names:
+        problems.append("SHA256SUMS asset set is incomplete or unexpected")
+    for name in expected_checksum_names:
+        path = archive_path.with_name(name)
+        if checksum_map.get(name) != _sha256_file(path):
+            problems.append(f"SHA256SUMS mismatch: {name}")
     return problems
 
 
@@ -413,6 +557,15 @@ def main(argv: list[str] | None = None) -> int:
             problems.extend(_doc_exec_bit_scan(archive))
             if problems:
                 return _fail("; ".join(problems[:10]))
+
+        companion_problems = _verify_companion_artifacts(
+            archive_path,
+            manifest_path,
+            manifest,
+            require=args.require_release_set,
+        )
+        if companion_problems:
+            return _fail("release-set: " + "; ".join(companion_problems[:10]))
 
         if args.validate:
             temporary_extract = False

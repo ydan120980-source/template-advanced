@@ -23,6 +23,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
+      - name: Resolve project version
+        run: |
+          set -euo pipefail
+          version="$(python -B -c 'import sys; sys.path.insert(0, "."); from tools.project_version import PROJECT_VERSION; print(PROJECT_VERSION)')"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_STEM=template-advanced-$version" >> "$GITHUB_ENV"
       - name: Unit tests
         run: python -B -m unittest discover -s tests
       - name: Verify
@@ -30,14 +36,19 @@ jobs:
       - name: Evals
         run: bash evals/run-evals.sh
       - name: Build release candidate
-        run: python -B scripts/build-release.py --out-dir dist-candidate
+        run: python -B scripts/build-release.py --version "$RELEASE_VERSION" --out-dir dist-candidate
       - name: Verify clean extraction
         run: >-
           python -B scripts/verify-release-archive.py
-          --archive dist-candidate/template-advanced-1.0.0.zip
-          --manifest dist-candidate/template-advanced-1.0.0.manifest.json
+          --archive "dist-candidate/$RELEASE_STEM.zip"
+          --manifest "dist-candidate/$RELEASE_STEM.manifest.json"
+          --require-release-set
           --validate
       - name: Workflow static check
         run: python -B -m tools.governance_v2 gate static --root .
       - name: Payload digest
-        run: cat dist-candidate/template-advanced-1.0.0.digest.txt
+        run: |
+          set -euo pipefail
+          payload_digest="dist-candidate/template-advanced-${RELEASE_VERSION}.payload.digest.txt"
+          test -s "$payload_digest"
+          cat "$payload_digest"

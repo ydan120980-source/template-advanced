@@ -96,9 +96,28 @@ def build_release(out_dir: Path) -> dict[str, object]:
         raise SystemExit(
             f"evals: build-release failed: {completed.stderr.strip()[-400:]}"
         )
-    manifest_path = next(out_dir.glob("*.manifest.json"))
+    manifest_paths = sorted(out_dir.glob("*.manifest.json"))
+    if len(manifest_paths) != 1:
+        raise SystemExit(
+            f"evals: expected exactly one release manifest, found {len(manifest_paths)}"
+        )
+
+    manifest_path = manifest_paths[0]
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    digest_text = next(out_dir.glob("*.digest.txt")).read_text(encoding="utf-8").strip()
+
+    suffix = ".manifest.json"
+    if not manifest_path.name.endswith(suffix):
+        raise SystemExit("evals: unexpected release manifest name")
+
+    release_stem = manifest_path.name[: -len(suffix)]
+    digest_path = out_dir / f"{release_stem}.digest.txt"
+
+    if not digest_path.is_file():
+        raise SystemExit(
+            f"evals: publication digest is missing: {digest_path.name}"
+        )
+
+    digest_text = digest_path.read_text(encoding="utf-8").strip()
     if digest_text != manifest["publication_digest"]:
         raise SystemExit("evals: digest file disagrees with the manifest")
     return manifest

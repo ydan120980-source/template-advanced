@@ -2,6 +2,7 @@
 
 from .engine import MAX_WORKERS, run_checks
 from .models import CheckResult, Report, RuleCallable
+from tools.project_version import PROJECT_VERSION
 
 __all__ = [
     "CheckResult",
@@ -11,4 +12,4 @@ __all__ = [
     "run_checks",
 ]
 
-__version__ = "1.0.0"
+__version__ = PROJECT_VERSION

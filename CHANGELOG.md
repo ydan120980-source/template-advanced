@@ -8,6 +8,15 @@ release tags exist.
 
 ### Changed
 
+- Final v2 release tooling now reads the authoritative `2.0.0` value from
+  `tools/project_version.py` across Run Guard, Template Doctor, the release
+  inventory, builder, verifier, workflows, tests, and release documentation.
+- Release candidates now produce and independently verify the deterministic
+  archive, manifest, publication digest, payload digest, provenance,
+  non-self-referential release-set, and `SHA256SUMS` assets.
+- Release workflows verify before any publication action, keep the candidate
+  workflow read-only, require annotated version tags for publication, and
+  refuse to clobber a non-draft Release.
 - Process-tree runs now explicitly close stdin, stdout, and stderr on every
   normal, nonzero, timeout, and cleanup path while preserving captured output.
   ResourceWarning regression coverage includes repeated short timeouts and

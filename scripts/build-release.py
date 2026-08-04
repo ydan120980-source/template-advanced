@@ -3,7 +3,7 @@
 
 Usage (from the repository root):
 
-    py -3 scripts/build-release.py [--version 1.0.0] [--out-dir dist]
+    py -3 scripts/build-release.py [--version 2.0.0] [--out-dir dist]
 
 The builder selects files with the canonical allowlist and exclusion rules in
 ``tools/template_doctor/release_inventory.py``, records relative path, size,
@@ -13,7 +13,12 @@ SHA-256, and intended POSIX mode for every entry, and writes:
   explicit Unix modes, no compression so bytes are identical on every
   platform);
 - ``dist/template-advanced-<version>.manifest.json`` (machine-readable);
-- ``dist/template-advanced-<version>.digest.txt`` (publication digest).
+- ``dist/template-advanced-<version>.digest.txt`` (publication digest);
+- ``dist/template-advanced-<version>.payload.digest.txt`` (archive SHA-256);
+- ``dist/template-advanced-<version>.provenance.json`` (source and asset
+  provenance); and
+- ``dist/template-advanced-<version>.release-set.json`` plus ``SHA256SUMS``
+  (the non-self-referential release-set and outer checksum list).
 
 Trusted source contract
 -----------------------
@@ -70,6 +75,8 @@ from tools.template_doctor.release_source import (  # noqa: E402
 FIXED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 MANIFEST_SCHEMA = "template-advanced/release-manifest/v1"
+PROVENANCE_SCHEMA = "template-advanced/release-provenance/v1"
+RELEASE_SET_SCHEMA = "template-advanced/release-set/v1"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -118,6 +125,26 @@ def _manifest(
     return manifest
 
 
+def _json_bytes(value: dict[str, object]) -> bytes:
+    """Serialize an artifact metadata object deterministically."""
+
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _asset(name: str, data: bytes) -> dict[str, object]:
+    return {"name": name, "size": len(data), "sha256": _sha256(data)}
+
+
+def _release_set_digest(body: dict[str, object]) -> str:
+    """Digest only the release-set body, never the release-set file itself."""
+
+    return _sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
 def _write_artifacts(
     out_dir: Path,
     version: str,
@@ -130,6 +157,10 @@ def _write_artifacts(
     archive_path = out_dir / f"{stem}.zip"
     manifest_path = out_dir / f"{stem}.manifest.json"
     digest_path = out_dir / f"{stem}.digest.txt"
+    payload_digest_path = out_dir / f"{stem}.payload.digest.txt"
+    provenance_path = out_dir / f"{stem}.provenance.json"
+    release_set_path = out_dir / f"{stem}.release-set.json"
+    checksums_path = out_dir / "SHA256SUMS"
 
     with zipfile.ZipFile(
         archive_path,
@@ -145,15 +176,71 @@ def _write_artifacts(
 
     # Explicit UTF-8 + LF bytes so Windows and POSIX produce identical text
     # files regardless of the platform's default newline behavior.
-    manifest_bytes = (
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
+    manifest_bytes = _json_bytes(manifest)
     manifest_path.write_bytes(manifest_bytes)
-    digest_path.write_bytes((digest + "\n").encode("utf-8"))
+    digest_bytes = (digest + "\n").encode("utf-8")
+    digest_path.write_bytes(digest_bytes)
+
+    archive_bytes = archive_path.read_bytes()
+    payload_digest = _sha256(archive_bytes)
+    payload_digest_bytes = (payload_digest + "\n").encode("ascii")
+    payload_digest_path.write_bytes(payload_digest_bytes)
+
+    provenance = {
+        "schema": PROVENANCE_SCHEMA,
+        "project": RELEASE_ROOT_NAME,
+        "version": version,
+        "source": manifest["source"],
+        "publication_digest": digest,
+        "assets": {
+            archive_path.name: _asset(archive_path.name, archive_bytes),
+            manifest_path.name: _asset(manifest_path.name, manifest_bytes),
+            digest_path.name: _asset(digest_path.name, digest_bytes),
+            payload_digest_path.name: _asset(payload_digest_path.name, payload_digest_bytes),
+        },
+    }
+    provenance_bytes = _json_bytes(provenance)
+    provenance_path.write_bytes(provenance_bytes)
+
+    release_set_body: dict[str, object] = {
+        "schema": RELEASE_SET_SCHEMA,
+        "project": RELEASE_ROOT_NAME,
+        "version": version,
+        "digest_scope": "assets listed below; this file and SHA256SUMS are excluded to avoid self-reference",
+        "assets": [
+            _asset(archive_path.name, archive_bytes),
+            _asset(manifest_path.name, manifest_bytes),
+            _asset(digest_path.name, digest_bytes),
+            _asset(payload_digest_path.name, payload_digest_bytes),
+            _asset(provenance_path.name, provenance_bytes),
+        ],
+    }
+    release_set = dict(release_set_body)
+    release_set["release_set_digest"] = _release_set_digest(release_set_body)
+    release_set_bytes = _json_bytes(release_set)
+    release_set_path.write_bytes(release_set_bytes)
+
+    checksum_assets = [
+        (archive_path.name, archive_bytes),
+        (manifest_path.name, manifest_bytes),
+        (digest_path.name, digest_bytes),
+        (payload_digest_path.name, payload_digest_bytes),
+        (provenance_path.name, provenance_bytes),
+        (release_set_path.name, release_set_bytes),
+    ]
+    checksums = "".join(f"{_sha256(data)}  {name}\n" for name, data in checksum_assets)
+    checksums_path.write_bytes(checksums.encode("ascii"))
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.version != RELEASE_VERSION:
+        print(
+            f"build-release: error: --version {args.version!r} does not match "
+            f"the authoritative project version {RELEASE_VERSION!r}",
+            file=sys.stderr,
+        )
+        return 2
     root = Path(args.root).resolve()
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -216,8 +303,13 @@ def main(argv: list[str] | None = None) -> int:
         f"build-release: {source_label}; archive={out_dir / (RELEASE_ROOT_NAME + '-' + args.version + '.zip')}"
         f" files={len(entries)}"
     )
-    print(f"build-release: manifest={out_dir / (RELEASE_ROOT_NAME + '-' + args.version + '.manifest.json')}")
+    stem = RELEASE_ROOT_NAME + "-" + args.version
+    print(f"build-release: manifest={out_dir / (stem + '.manifest.json')}")
     print(f"build-release: digest={digest}")
+    print(f"build-release: payload-digest={out_dir / (stem + '.payload.digest.txt')}")
+    print(f"build-release: provenance={out_dir / (stem + '.provenance.json')}")
+    print(f"build-release: release-set={out_dir / (stem + '.release-set.json')}")
+    print(f"build-release: checksums={out_dir / 'SHA256SUMS'}")
     return 0
 
 
