@@ -38,6 +38,25 @@ def _sleep_command(seconds: int) -> list[str]:
     return ["sh", "-c", f"sleep {seconds}; echo done"]
 
 
+def _partial_output_timeout_command() -> list[str]:
+    """Emit partial output through a native shell before a long sleep."""
+
+    if os.name == "nt":
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        return [
+            comspec,
+            "/d",
+            "/s",
+            "/c",
+            "(echo before & echo err-before 1>&2 & ping -n 61 127.0.0.1 >nul)",
+        ]
+    return [
+        "sh",
+        "-c",
+        "printf 'before\\n'; printf 'err-before\\n' >&2; exec sleep 60",
+    ]
+
+
 class ProcessTreeTimeoutTests(unittest.TestCase):
     maxDiff = None
 
@@ -133,17 +152,10 @@ class ProcessTreeTimeoutTests(unittest.TestCase):
         self.assertEqual(result.stderr.strip(), "err")
 
     def test_timeout_preserves_partial_stdout_and_stderr(self) -> None:
-        command = [
-            sys.executable,
-            "-c",
-            (
-                "import sys, time; print('before', flush=True); "
-                "print('err-before', file=sys.stderr, flush=True); time.sleep(60)"
-            ),
-        ]
+        command = _partial_output_timeout_command()
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("error", ResourceWarning)
-            result = run_process_tree(command, timeout=1, label="partial-output")
+            result = run_process_tree(command, timeout=2, label="partial-output")
             gc.collect()
         self.assertFalse(
             [warning for warning in caught if issubclass(warning.category, ResourceWarning)]

@@ -152,18 +152,28 @@ def _section_body(text: str, section: str) -> str | None:
 
 def _control_placeholders(root: Path) -> CheckResult:
     rule_id = "control.placeholders"
-    paths = (
+    v2_paths = (
+        "docs/ai-workflow/TASK_ISSUE_CONTRACT.md",
+        "docs/ai-workflow/ISSUE_EVENT_CHAIN.md",
+        "docs/ai-workflow/OFFLINE_CACHE.md",
+        "docs/ai-workflow/REMOTE_GATES.md",
+        "docs/ai-workflow/GITHUB_RELEASE_READINESS.md",
+        "docs/ai-workflow/V1_TO_V2_MIGRATION.md",
+    )
+    legacy_paths = (
         "docs/control/NEXT_CODEX_TASK.md",
         "docs/control/CURRENT_PROJECT_STATE.md",
         "docs/control/SPRINT_LEDGER.md",
         "docs/control/CHATGPT_HANDOFF.md",
     )
+    paths = v2_paths if all((root / path).is_file() for path in v2_paths) else legacy_paths
+    required_paths = set(v2_paths if paths == v2_paths else legacy_paths[:2])
     missing_required: list[str] = []
     affected: list[str] = []
     for relative in paths:
         text = _read_text(root / relative)
         if text is None:
-            if relative.endswith(("NEXT_CODEX_TASK.md", "CURRENT_PROJECT_STATE.md")):
+            if relative in required_paths:
                 missing_required.append(relative)
             continue
         if _placeholder_labels(text):
@@ -179,15 +189,14 @@ def _control_placeholders(root: Path) -> CheckResult:
             status="fail",
             evidence="; ".join(evidence_parts),
             recommendation=(
-                "Replace template markers with current project facts and create all "
-                "required control files."
+                "Replace template markers and keep all v2 governance documents substantive."
             ),
         )
     return _result(
         rule_id,
         status="pass",
-        evidence="Required control files exist and scanned control files contain no template markers.",
-        recommendation="Keep control files current as the project changes.",
+        evidence="Required v2 governance documents exist and contain no template markers.",
+        recommendation="Keep Issue, cache, gate, migration, and release guidance aligned.",
     )
 
 
@@ -198,9 +207,9 @@ def _next_task_executable(root: Path) -> CheckResult:
     if text is None:
         return _result(
             rule_id,
-            status="fail",
-            evidence=f"{relative} is missing.",
-            recommendation="Generate an executable Task Packet with aiwf-plan-sprint.",
+            status="skip",
+            evidence=f"{relative} is retired; the GitHub Task Issue is the active plan authority.",
+            recommendation="Verify the Task Issue contract and use a validated cache when offline.",
         )
     missing: list[str] = []
     for section, aliases in REQUIRED_NEXT_SECTIONS.items():
@@ -226,15 +235,14 @@ def _next_task_executable(root: Path) -> CheckResult:
             status="fail",
             evidence="Task Packet is not executable; missing or invalid: " + ", ".join(sorted(set(missing))),
             recommendation=(
-                "Regenerate NEXT_CODEX_TASK.md with a real Task ID, mode, scope, "
-                "validation, stop conditions, and return format."
+                "Generate a bounded transitional Task Packet or repair the active Issue contract."
             ),
         )
     return _result(
         rule_id,
         status="pass",
         evidence=f"Executable Task Packet detected for {task_id.group(1).strip()}.",
-        recommendation="Keep the Task Packet bounded and authoritative.",
+        recommendation="Keep the transitional Task Packet subordinate to the Task Issue.",
     )
 
 
@@ -245,9 +253,9 @@ def _state_freshness(root: Path) -> CheckResult:
     if text is None:
         return _result(
             rule_id,
-            status="fail",
-            evidence=f"{relative} is missing.",
-            recommendation="Create current state with a real update date and explicit stale flag.",
+            status="skip",
+            evidence=f"{relative} is retired; durable state is summarized in Task Issue events.",
+            recommendation="Record accepted durable state in a validated Issue event.",
         )
     match = re.search(r"(?im)^(?:[-*]\s*\*\*)?Last Updated(?:\*\*)?:\s*(\d{4}-\d{2}-\d{2})\s*$", text)
     stale = re.search(r"(?im)^(?:[-*]\s*\*\*)?Is state stale\?(?:\*\*)?:\s*(yes|no)\s*$", text)
@@ -320,6 +328,17 @@ def _state_freshness(root: Path) -> CheckResult:
 
 def _single_planning_authority(root: Path) -> CheckResult:
     rule_id = "planning.single_authority"
+    issue_contract = _read_text(root / "docs/ai-workflow/TASK_ISSUE_CONTRACT.md")
+    agents_text = _read_text(root / "AGENTS.md")
+    if issue_contract is not None and agents_text is not None and re.search(
+        r"GitHub Task Issue.{0,120}(?:authorit|active)", agents_text, re.IGNORECASE | re.DOTALL
+    ):
+        return _result(
+            rule_id,
+            status="pass",
+            evidence="AGENTS.md identifies the verified GitHub Task Issue as the active planning authority.",
+            recommendation="Keep caches, ledgers, and transitional packets subordinate to the Issue.",
+        )
     texts: list[tuple[str, str]] = []
     for relative in ("AGENTS.md", "docs/control/CODEX_RUNTIME_PROFILE.md"):
         text = _read_text(root / relative)
@@ -330,11 +349,11 @@ def _single_planning_authority(root: Path) -> CheckResult:
             rule_id,
             status="fail",
             evidence="AGENTS.md and CODEX_RUNTIME_PROFILE.md are both absent.",
-            recommendation="Document NEXT_CODEX_TASK.md as the single sprint authority before declaring readiness.",
+            recommendation="Document the GitHub Task Issue as the active authority before declaring readiness.",
         )
     inconsistent: list[str] = []
     for relative, text in texts:
-        mentions_task = "NEXT_CODEX_TASK.md" in text
+        mentions_task = "NEXT_CODEX_TASK.md" in text or "Task Issue" in text
         authority = bool(
             re.search(
                 r"(?:single|sole|only)\s+(?:authoritative\s+)?(?:sprint\s+)?(?:plan|authority)",
@@ -342,6 +361,7 @@ def _single_planning_authority(root: Path) -> CheckResult:
                 re.IGNORECASE,
             )
             or re.search(r"only authoritative sprint plan", text, re.IGNORECASE)
+            or re.search(r"(?:active|long-lived) planning authority", text, re.IGNORECASE)
         )
         subordinate = "planning-with-files" not in text or bool(
             re.search(r"planning-with-files.{0,120}(?:subordinate|journal)", text, re.IGNORECASE | re.DOTALL)
@@ -354,15 +374,14 @@ def _single_planning_authority(root: Path) -> CheckResult:
             status="fail",
             evidence="Single planning authority is not consistently stated in: " + ", ".join(sorted(inconsistent)),
             recommendation=(
-                "Declare NEXT_CODEX_TASK.md as the sole sprint authority and planning-with-files "
-                "as a subordinate execution journal."
+                "Declare the GitHub Task Issue as the active authority and all local ledgers as subordinate evidence."
             ),
         )
     return _result(
         rule_id,
         status="pass",
-        evidence="Available governance files consistently identify NEXT_CODEX_TASK.md as planning authority.",
-        recommendation="Preserve this authority boundary in future governance edits.",
+        evidence="Available governance files consistently identify one active planning authority.",
+        recommendation="Preserve the Issue/cache authority boundary in future governance edits.",
     )
 
 

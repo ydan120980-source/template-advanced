@@ -386,10 +386,24 @@ class ReleasePipelineTests(unittest.TestCase):
     def test_clean_template_has_no_author_state_or_active_plan(self) -> None:
         for relative in (".planning", ".mode", ".nonce", ".stop_blocks"):
             self.assertFalse((REPO_ROOT / relative).exists(), relative)
-        packet = (REPO_ROOT / "docs" / "control" / "NEXT_CODEX_TASK.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("TEMPLATE-ONBOARDING-V1", packet)
+        for relative in (
+            "docs/control/NEXT_CODEX_TASK.md",
+            "docs/control/CURRENT_PROJECT_STATE.md",
+            "docs/control/CHATGPT_HANDOFF.md",
+            "docs/control/SPRINT_LEDGER.md",
+        ):
+            self.assertFalse((REPO_ROOT / relative).exists(), relative)
+        for name in (
+            "TASK_ISSUE_CONTRACT.md",
+            "ISSUE_EVENT_CHAIN.md",
+            "OFFLINE_CACHE.md",
+            "REMOTE_GATES.md",
+            "GITHUB_RELEASE_READINESS.md",
+            "V1_TO_V2_MIGRATION.md",
+        ):
+            self.assertTrue(
+                (REPO_ROOT / "docs" / "ai-workflow" / name).is_file(), name
+            )
         combined = "\n".join(
             path.read_text(encoding="utf-8")
             for path in (

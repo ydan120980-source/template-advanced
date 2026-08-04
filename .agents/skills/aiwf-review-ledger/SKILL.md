@@ -1,70 +1,26 @@
 ---
 name: aiwf-review-ledger
-description: Review a completed Codex sprint Evidence Ledger for scope, validation, diff quality, and state update recommendations.
+description: Review an Evidence Ledger and exact diff for scope, validation, contract integrity, and next-step readiness.
 ---
 
 # aiwf-review-ledger
 
-Use this skill after a Codex sprint produces a provisional or completed Evidence Ledger.
-
-## Inputs
-
-- The provisional Evidence Ledger plus pre-review gate, or the completed Evidence Ledger
-- `docs/control/NEXT_CODEX_TASK.md`
-- `docs/control/CURRENT_PROJECT_STATE.md`
-- `docs/control/SPRINT_LEDGER.md`
-- Relevant diff or changed-file summary
-- `docs/ai-workflow/EVIDENCE_LEDGER_TEMPLATE.md`
-- `docs/ai-workflow/SPRINT_DECISION_SCORECARD.md` for Standard / Full
-- Run Guard configuration, audit ledger, summary, and gate report when the Task Packet marks it `required`
+Review the provisional/completed Evidence Ledger, verified Task Issue, relevant diff, validation output, and the stable governance documents under docs/ai-workflow/. During migration, include the transitional Task Packet; after PR A, do not require retired docs/control files.
 
 ## Checks
 
-- Scope: changed files are within Allowed Paths and avoid Forbidden Paths.
-- Validation: required commands were run, skipped commands have credible reasons, and failures are classified.
-- Batched validation: verify each native command's own exit result; a later successful command must not mask an earlier failure behind outer exit `0`.
-- Diff: changes are proportional to Task Size and Workflow Mode, with no unrelated cleanup or hidden contract changes.
-- State update: recommendations are reasonable and do not turn transient details into stable facts.
-- Evidence quality: files changed, commands, results, risks, limitations, and next step are clear enough for a new session.
-- Run Guard: retry lineage is complete, budgets are honored or explicitly waived, ownership is conflict-free, required handoffs exist, and validation/review events match independent evidence.
-- Command budget: independently recompute every declared main/helper source under the Task Packet's original metric and window; block main-only, missing, stale, duplicated, or over-limit evidence.
-- Delivery-file budget: recompute unique normalized artifact paths from the ledger, include the Task Packet when declared, and block missing enforcement or over-limit evidence.
+- Contract: Issue digest, base SHA, acceptance, allowed/forbidden paths, and event-chain evidence are consistent.
+- Scope: every changed/deleted path is authorized; no PR B, secret, dependency, remote write, or unrelated cleanup is hidden in the diff.
+- Validation: each native command has an explicit result; skipped/CACHED/BLOCKED evidence is not promoted to PASS; local checks are separated from exact-SHA remote checks.
+- Workflow/security: permissions, action pins, timeouts, read-only release-candidate behavior, and unsupported YAML boundaries are tested.
+- Diff quality: changes fit the sprint and preserve rollback/history rules.
+- Run Guard: if used, verify diagnostic retry/path/handoff accounting, but do not treat its local gate as release qualification.
+- State: only accepted durable facts become Issue summary/events; transient command noise and unaccepted suggestions remain out.
 
-## Run Guard Review Sequence
+## Review sequence
 
-When Run Guard requires independent review:
-
-1. review the provisional Evidence Ledger after required validation and a pre-review gate whose only failure is `gate.review`;
-2. issue the review verdict;
-3. after a pass, the executor records `review_passed`;
-4. the executor snapshots all declared command sources after review, runs the final gate, and finalizes the Evidence Ledger;
-5. if requested, perform a bounded confirmation that the final ledger accurately includes the prior verdict and final gate. New code or evidence changes require fresh validation and review rather than this bounded confirmation.
+Issue a clear PASS or FINDINGS verdict with file/line anchors. After a pass, the executor records the review event and rechecks any evidence that changed. Do not authorize squash merge, Bootstrap A/B, Release Freeze, tag, or Release from a local ledger; those are later owner-controlled gates.
 
 ## Output
 
-Return one of:
-
-- `pass`: sprint evidence is sufficient and no required follow-up blocks acceptance.
-- `pass with follow-up`: sprint can be accepted, but a bounded follow-up is recommended.
-- `blocked`: missing evidence, scope violation, validation failure, or state contradiction prevents acceptance.
-
-Also include:
-
-- Scope finding
-- Validation finding
-- Diff finding
-- State update recommendation
-- Next task recommendation
-- Required fix sprint, if blocked
-
-## Block Conditions
-
-Block the sprint if:
-
-- Forbidden Paths were modified.
-- Required validation was not run and no acceptable reason is given.
-- The diff exceeds the declared mode or budget.
-- Evidence Ledger omits key facts.
-- Required Run Guard evidence is corrupted, missing, internally inconsistent, or reports an unresolved gate failure.
-- State update recommendations conflict with current project state.
-- A contract, interface, dependency, CI, or architecture change happened without explicit permission.
+Return verdict, findings by severity, validation/scope assessment, known limitations, and the smallest safe next step.
