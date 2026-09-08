@@ -369,10 +369,20 @@ elif case == "release-determinism":
             "publication-digest\n",
             encoding="utf-8",
         )
-        if (
-            read_release_manifest(payload_decoy)["publication_digest"]
-            != "publication-digest"
-        ):
+        original_glob = Path.glob
+
+        def reject_digest_wildcard(path: Path, pattern: str):
+            if "digest.txt" in pattern:
+                raise SystemExit(
+                    "evals: publication digest selection used a wildcard"
+                )
+            return original_glob(path, pattern)
+
+        with unittest.mock.patch.object(Path, "glob", reject_digest_wildcard):
+            selected_digest = read_release_manifest(payload_decoy)[
+                "publication_digest"
+            ]
+        if selected_digest != "publication-digest":
             raise SystemExit("evals: payload digest decoy replaced publication digest")
         print("release-determinism metadata-regressions=5 passed")
 
