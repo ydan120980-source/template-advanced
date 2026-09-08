@@ -76,26 +76,9 @@ def find_bash() -> str:
     raise SystemExit("evals: bash is required")
 
 
-def build_release(out_dir: Path) -> dict[str, object]:
-    from tools.template_doctor.release_source import is_git_work_tree
+def read_release_manifest(out_dir: Path) -> dict[str, object]:
+    """Load the one release manifest and its exact publication digest."""
 
-    arguments = [
-        "scripts/build-release.py",
-        "--root",
-        str(ROOT),
-        "--out-dir",
-        str(out_dir),
-    ]
-    if not is_git_work_tree(ROOT):
-        # The eval may run inside a release extraction, which has no Git
-        # work tree; the trusted-source gate then requires an explicit
-        # unverified label.
-        arguments.append("--allow-unverified")
-    completed = run_python(*arguments)
-    if completed.returncode != 0:
-        raise SystemExit(
-            f"evals: build-release failed: {completed.stderr.strip()[-400:]}"
-        )
     manifest_paths = sorted(out_dir.glob("*.manifest.json"))
     if len(manifest_paths) != 1:
         raise SystemExit(
@@ -121,6 +104,29 @@ def build_release(out_dir: Path) -> dict[str, object]:
     if digest_text != manifest["publication_digest"]:
         raise SystemExit("evals: digest file disagrees with the manifest")
     return manifest
+
+
+def build_release(out_dir: Path) -> dict[str, object]:
+    from tools.template_doctor.release_source import is_git_work_tree
+
+    arguments = [
+        "scripts/build-release.py",
+        "--root",
+        str(ROOT),
+        "--out-dir",
+        str(out_dir),
+    ]
+    if not is_git_work_tree(ROOT):
+        # The eval may run inside a release extraction, which has no Git
+        # work tree; the trusted-source gate then requires an explicit
+        # unverified label.
+        arguments.append("--allow-unverified")
+    completed = run_python(*arguments)
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"evals: build-release failed: {completed.stderr.strip()[-400:]}"
+        )
+    return read_release_manifest(out_dir)
 
 
 case = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -287,8 +293,101 @@ elif case == "release-pollution-detection":
 
 elif case == "release-determinism":
     with tempfile.TemporaryDirectory() as directory:
-        first_dir = Path(directory) / "first"
-        second_dir = Path(directory) / "second"
+        root = Path(directory)
+
+        def write_manifest(
+            target: Path,
+            *,
+            name: str = "template-advanced-regression.manifest.json",
+            digest: str = "publication-digest",
+        ) -> None:
+            (target / name).write_text(
+                json.dumps({"publication_digest": digest}),
+                encoding="utf-8",
+            )
+
+        def require_metadata_failure(target: Path, expected: str) -> None:
+            try:
+                read_release_manifest(target)
+            except SystemExit as exc:
+                if expected not in str(exc):
+                    raise SystemExit(
+                        "evals: release metadata failure did not match: "
+                        f"expected {expected!r}, got {str(exc)!r}"
+                    ) from exc
+            else:
+                raise SystemExit(
+                    f"evals: release metadata unexpectedly passed: {expected}"
+                )
+
+        metadata_failures = (
+            (
+                "missing-manifest",
+                (),
+                None,
+                "expected exactly one release manifest, found 0",
+            ),
+            (
+                "duplicate-manifest",
+                ("first.manifest.json", "second.manifest.json"),
+                None,
+                "expected exactly one release manifest, found 2",
+            ),
+            (
+                "missing-digest",
+                ("template-advanced-regression.manifest.json",),
+                None,
+                "publication digest is missing: template-advanced-regression.digest.txt",
+            ),
+            (
+                "digest-mismatch",
+                ("template-advanced-regression.manifest.json",),
+                "different-digest",
+                "digest file disagrees with the manifest",
+            ),
+        )
+        for name, manifest_names, digest_text, expected in metadata_failures:
+            target = root / name
+            target.mkdir()
+            for manifest_name in manifest_names:
+                write_manifest(target, name=manifest_name)
+            if digest_text is not None:
+                (target / "template-advanced-regression.digest.txt").write_text(
+                    f"{digest_text}\n",
+                    encoding="utf-8",
+                )
+            require_metadata_failure(target, expected)
+
+        payload_decoy = root / "payload-decoy"
+        payload_decoy.mkdir()
+        write_manifest(payload_decoy)
+        (payload_decoy / "template-advanced-regression.payload.digest.txt").write_text(
+            "payload-digest\n",
+            encoding="utf-8",
+        )
+        (payload_decoy / "template-advanced-regression.digest.txt").write_text(
+            "publication-digest\n",
+            encoding="utf-8",
+        )
+        original_glob = Path.glob
+
+        def reject_digest_wildcard(path: Path, pattern: str):
+            if "digest.txt" in pattern:
+                raise SystemExit(
+                    "evals: publication digest selection used a wildcard"
+                )
+            return original_glob(path, pattern)
+
+        with unittest.mock.patch.object(Path, "glob", reject_digest_wildcard):
+            selected_digest = read_release_manifest(payload_decoy)[
+                "publication_digest"
+            ]
+        if selected_digest != "publication-digest":
+            raise SystemExit("evals: payload digest decoy replaced publication digest")
+        print("release-determinism metadata-regressions=5 passed")
+
+        first_dir = root / "first"
+        second_dir = root / "second"
         first_dir.mkdir()
         second_dir.mkdir()
         first = build_release(first_dir)
