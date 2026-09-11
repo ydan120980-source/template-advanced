@@ -3,7 +3,7 @@
 
 Usage (from the repository root):
 
-    py -3 scripts/verify-release-archive.py --archive dist/template-advanced-2.0.0.zip --manifest dist/template-advanced-2.0.0.manifest.json
+    py -3 scripts/verify-release-archive.py --archive dist/template-advanced-2.1.0.zip --manifest dist/template-advanced-2.1.0.manifest.json
 
 Optional:
 
@@ -50,6 +50,7 @@ from tools.template_doctor.policy import (  # noqa: E402
     RELEASE_EXTRACTION_ALLOWED_FAILURES,
 )
 from tools.template_doctor.release_inventory import (  # noqa: E402
+    RELEASE_VERSION,
     TEXT_FILE_SUFFIXES,
     iter_release_entries,
     publication_digest,
@@ -262,8 +263,10 @@ def _verify_companion_artifacts(
 
     problems: list[str] = []
     expected_version = manifest.get("version")
-    if expected_version != "2.0.0":
-        problems.append(f"release-set version is not 2.0.0: {expected_version!r}")
+    if expected_version != RELEASE_VERSION:
+        problems.append(
+            f"release-set version is not {RELEASE_VERSION}: {expected_version!r}"
+        )
 
     payload_digest_path = companions["payload_digest"]
     payload_digest = payload_digest_path.read_text(encoding="ascii").strip()

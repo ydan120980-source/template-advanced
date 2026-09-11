@@ -149,8 +149,8 @@ conditions. See [AIWF Run Guard](docs/ai-workflow/AIWF_RUN_GUARD.md).
 ```bash
 python3 scripts/build-release.py
 python3 scripts/verify-release-archive.py \
-  --archive dist/template-advanced-2.0.0.zip \
-  --manifest dist/template-advanced-2.0.0.manifest.json \
+  --archive dist/template-advanced-2.1.0.zip \
+  --manifest dist/template-advanced-2.1.0.manifest.json \
   --require-release-set
 ```
 
@@ -201,8 +201,8 @@ release artifacts.
 
    ```bash
    python3 scripts/verify-release-archive.py \
-     --archive template-advanced-2.0.0.zip \
-     --manifest template-advanced-2.0.0.manifest.json \
+     --archive template-advanced-2.1.0.zip \
+     --manifest template-advanced-2.1.0.manifest.json \
      --require-release-set \
      --validate
    ```
@@ -215,14 +215,14 @@ release artifacts.
 
 ## Release Artifacts
 
-- `template-advanced-2.0.0.zip` — the deterministic release archive.
-- `template-advanced-2.0.0.manifest.json` — path, size, SHA-256, and mode for
+- `template-advanced-2.1.0.zip` — the deterministic release archive.
+- `template-advanced-2.1.0.manifest.json` — path, size, SHA-256, and mode for
   every file plus the publication digest.
-- `template-advanced-2.0.0.digest.txt` — the publication digest.
-- `template-advanced-2.0.0.payload.digest.txt` — the archive-byte SHA-256.
-- `template-advanced-2.0.0.provenance.json` — source and companion-asset
+- `template-advanced-2.1.0.digest.txt` — the publication digest.
+- `template-advanced-2.1.0.payload.digest.txt` — the archive-byte SHA-256.
+- `template-advanced-2.1.0.provenance.json` — source and companion-asset
   provenance.
-- `template-advanced-2.0.0.release-set.json` — the non-self-referential
+- `template-advanced-2.1.0.release-set.json` — the non-self-referential
   release-set digest and asset summary.
 - `SHA256SUMS` — SHA-256 of the six release assets above.
 
