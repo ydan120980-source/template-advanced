@@ -397,9 +397,12 @@ class PrepareIsolationTests(unittest.TestCase):
 
             toplevel = _run_git(trial_dir, "rev-parse", "--show-toplevel")
             self.assertEqual(toplevel.returncode, 0, toplevel.stderr)
+            # Same physical-form comparison as the isolation probe: the
+            # toplevel comes back symlink- and short-name-resolved while the
+            # trial directory may be spelled logically.
             self.assertEqual(
-                os.path.normcase(os.path.abspath(toplevel.stdout.strip())),
-                os.path.normcase(os.path.abspath(str(trial_dir))),
+                os.path.normcase(os.path.realpath(toplevel.stdout.strip())),
+                os.path.normcase(os.path.realpath(str(trial_dir))),
             )
             log = _run_git(trial_dir, "log", "--oneline")
             self.assertEqual(len(log.stdout.strip().splitlines()), 1)
