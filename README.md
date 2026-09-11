@@ -228,10 +228,13 @@ release artifacts.
 
 ## Continuous Integration
 
-The public repository runs three workflows:
+The public repository runs four workflows:
 
 - `ci.yml` — Ubuntu, Windows, and macOS runners with Python 3.11, 3.12, and
   3.13; setup, unit tests, verify, evals, and the Doctor CI gate.
+- `release-candidate.yml` — read-only candidate validation (payload review,
+  clean extraction, full local validation, and targeted workflow checks) on
+  pull requests and `main` pushes.
 - `release-artifacts.yml` — clean-commit release integration (double build,
   byte comparison, full clean-extraction validation), archive verification,
   the release-set checksums, and Draft Release attachment on annotated `v*`
@@ -239,17 +242,25 @@ The public repository runs three workflows:
 - `security.yml` — CodeQL, credential scanning, and documentation
   local-path hygiene.
 
+Together these separate three concerns: repository governance tooling is
+validated by `ci.yml`, run diagnostics (Run Guard, Template Doctor) ship with
+the toolkit and are exercised by the same matrix, and release validation is
+owned by `release-candidate.yml` plus `release-artifacts.yml` with `security.yml`
+running alongside. GitHub Actions are pinned to full commit SHAs; Dependabot
+keeps them current.
+
 macOS validation is performed by GitHub Actions; only workflow results shown
 in the repository are treated as proof for that platform.
 
 ## Repository Workflow
 
-1. Read `AGENTS.md` and the current Task Packet.
-2. Plan a bounded sprint with the project `aiwf-plan-sprint` Skill.
+1. Read `AGENTS.md` and the verified GitHub Task Issue.
+2. Plan a bounded sprint with the project `aiwf-plan-sprint` Skill and record
+   the contract on the Task Issue.
 3. Use an isolated planning journal only for long Standard or Full work.
-4. Execute and validate within the Task Packet boundaries.
+4. Execute and validate within the Task Issue boundaries.
 5. Obtain independent review when required and return an Evidence Ledger.
-6. Compress only accepted results into durable control state.
+6. Compress only accepted results into the Task Issue event chain.
 
 ## Security
 

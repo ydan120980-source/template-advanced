@@ -43,11 +43,18 @@ Independent rules run through a bounded thread pool. The execution engine sorts 
 The Doctor checks:
 
 - unresolved placeholders in control files;
-- whether `NEXT_CODEX_TASK.md` is structurally executable;
-- whether `CURRENT_PROJECT_STATE.md` has usable freshness metadata;
+- whether a retired control file is re-claimed as the sole or active
+  planning authority in current documents (release docs, onboarding guide,
+  and current `docs/ai-workflow/` + `docs/architecture/` guidance); the
+  check targets known document contracts, not natural-language semantics;
+- whether the onboarding README enumerates every existing GitHub workflow;
+- legacy fallbacks: whether a transitional `NEXT_CODEX_TASK.md` is
+  structurally executable, whether `CURRENT_PROJECT_STATE.md` has usable
+  freshness metadata, and whether the Task Packet, current state, and any
+  active-plan pointer agree (these rules report `skip` when the retired
+  files are absent, which is the expected v2 state);
 - whether control docs and README embed author-local paths, active-plan
   pointers, or historical scan/run identifiers;
-- whether the Task Packet, current state, and any active-plan pointer agree;
 - whether docs assert drift-prone numeric test/rule counts or pass claims;
 - whether a published release manifest still matches the current release tree;
 - consistency of the single-planning-authority policy;
