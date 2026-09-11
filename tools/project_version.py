@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-PROJECT_VERSION = "2.0.0"
+PROJECT_VERSION = "2.1.0"
 
 __all__ = ["PROJECT_VERSION"]
