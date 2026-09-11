@@ -6,6 +6,10 @@ release tags exist.
 
 ## Unreleased
 
+No changes yet.
+
+## [2.1.0] - 2026-09-11
+
 ### Added
 
 - `tools/workflow_eval/`: a standard-library evaluation module with
@@ -59,6 +63,9 @@ release tags exist.
   onboarding README to enumerate every existing GitHub workflow.
 
 ### Fixed
+
+- The release-set verifier reads the authoritative project version instead
+  of rejecting every release newer than 2.0.0.
 
 - The release-determinism eval covers publication digest selection
   deterministically — missing, duplicate, and mismatched digest files plus a

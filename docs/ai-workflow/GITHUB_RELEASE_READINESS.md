@@ -19,7 +19,7 @@ must retain the tracked `LICENSE` and `NOTICE` files.
 - [ ] Template Doctor is ready; optional CodeGraph absence remains explicit.
 - [ ] `py -3 -B -m tools.governance_v2 gate static --root .` returns
   `STATIC_TARGETED_PASS`.
-- [ ] Release-candidate builds a deterministic `2.0.0` candidate, verifies
+- [ ] Release-candidate builds a deterministic candidate at the authoritative project version, verifies
   clean extraction, and executes the real payload digest gate. It validates
   the publication digest, payload digest, provenance, release-set, and
   `SHA256SUMS` without write permission or tag/Release commands.
@@ -36,8 +36,8 @@ non-empty and successful, the Check Run conclusion must be `success`, and the
 required GitHub App ID/context must match. Missing, skipped, neutral, partial,
 or API-inaccessible evidence is not success.
 
-The final PR B candidate is still a Draft and must be validated against its
-exact remote head. The required check, ruleset, immutable-release, tag, and
+Every release preparation PR must be validated against its exact remote
+head. The required check, ruleset, immutable-release, tag, and
 Draft Release readbacks remain separate evidence categories; a local green
 candidate never substitutes for any of them.
 
@@ -45,7 +45,7 @@ candidate never substitutes for any of them.
 
 Use `git archive HEAD` for a clean source snapshot. Use
 `scripts/build-release.py` plus the independent archive verifier for formal
-`template-advanced-2.0.0` artifacts. Never zip the working directory. A
+`template-advanced-<version>` artifacts. Never zip the working directory. A
 release builder must read release files from committed HEAD and reject dirty,
 untracked, deleted, or locally divergent release content.
 

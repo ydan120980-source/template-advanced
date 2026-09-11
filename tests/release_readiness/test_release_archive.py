@@ -247,6 +247,30 @@ class ReleasePipelineTests(unittest.TestCase):
 
         self.assertIn("passed", completed.stdout)
 
+    def test_verifier_rejects_wrong_manifest_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            out_dir = Path(temporary_directory)
+            _run_python(REPO_ROOT, *_build_command("--out-dir", str(out_dir)))
+            manifest_path = out_dir / f"{STEM}.manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["version"] = "0.0.0"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            completed = _run_python(
+                REPO_ROOT,
+                "scripts/verify-release-archive.py",
+                "--archive",
+                str(out_dir / f"{STEM}.zip"),
+                "--manifest",
+                str(manifest_path),
+                "--require-release-set",
+                check=False,
+            )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            f"release-set version is not {RELEASE_VERSION}",
+            completed.stdout + completed.stderr,
+        )
+
     def test_verifier_rejects_pollution_and_case_collision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
