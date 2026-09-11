@@ -48,6 +48,32 @@ VALIDATION_PATHS = (
     "scripts/verify.sh",
     "evals/run-evals.sh",
 )
+RETIRED_CONTROL_FILES = (
+    "NEXT_CODEX_TASK.md",
+    "CURRENT_PROJECT_STATE.md",
+    "SPRINT_LEDGER.md",
+    "CHATGPT_HANDOFF.md",
+)
+# A current document re-claims a retired control file when one line both
+# names the retired file and asserts sole/active authority. The check is a
+# known-document contract: it scans release docs plus the current
+# ai-workflow/architecture guidance, never legacy compatibility files,
+# examples, tests, or inert prompt text, and it does not judge natural
+# language beyond these fixed phrases.
+RETIRED_AUTHORITY_CLAIM_PATTERN = re.compile(
+    r"\b(?:sole|single|only)\b[^.\n]{0,60}\bauthorit"
+    r"|\bauthorit[^.\n]{0,60}\b(?:sole|single|only)\b"
+    r"|\bis\s+the\s+(?:active|current)\s+(?:sprint\s+)?plan\b",
+    re.IGNORECASE,
+)
+# Lines that are clearly historical statements never count as re-claims:
+# past-tense wording, migration prose, and explicit "before vN" context.
+RETIRED_AUTHORITY_HISTORICAL_PATTERN = re.compile(
+    r"\b(?:was|were|had\s+been|used\s+to|previously|formerly|historically|retired)\b"
+    r"|\bhistor\w*"
+    r"|\bbefore\s+v?\d",
+    re.IGNORECASE,
+)
 REPRESENTATIVE_IGNORED_PATHS = (
     "__pycache__/module.pyc",
     ".coverage",
@@ -326,8 +352,66 @@ def _state_freshness(root: Path) -> CheckResult:
     )
 
 
+def _retired_authority_reclaims(root: Path) -> list[str]:
+    """Find current documents re-claiming a retired control file as authority.
+
+    The scan runs only in v2 repositories, identified by the presence of
+    ``docs/ai-workflow/TASK_ISSUE_CONTRACT.md``: there, a present-tense
+    authority claim over a retired control file is drift whether or not the
+    file has been re-added. Trees without that marker are legacy
+    compatibility layouts and are tolerated as-is. Lines that are clearly
+    historical statements (past tense, migration notes, "before v2") never
+    count as re-claims.
+    """
+
+    if not (root / "docs" / "ai-workflow" / "TASK_ISSUE_CONTRACT.md").is_file():
+        return []
+    current_documents: list[Path] = []
+    for relative in (
+        "README.md",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "CHANGELOG.md",
+        "AGENTS.md",
+    ):
+        candidate = root / relative
+        if candidate.is_file():
+            current_documents.append(candidate)
+    for directory in ("docs/ai-workflow", "docs/architecture"):
+        directory_path = root / directory
+        if directory_path.is_dir():
+            current_documents.extend(sorted(directory_path.glob("*.md")))
+    affected: list[str] = []
+    for path in current_documents:
+        text = _read_text(path)
+        if text is None:
+            continue
+        for line in text.splitlines():
+            named_retired = any(name in line for name in RETIRED_CONTROL_FILES)
+            if not named_retired:
+                continue
+            if RETIRED_AUTHORITY_HISTORICAL_PATTERN.search(line):
+                continue
+            if RETIRED_AUTHORITY_CLAIM_PATTERN.search(line):
+                affected.append(path.relative_to(root).as_posix())
+                break
+    return affected
+
+
 def _single_planning_authority(root: Path) -> CheckResult:
     rule_id = "planning.single_authority"
+    reclaims = _retired_authority_reclaims(root)
+    if reclaims:
+        return _result(
+            rule_id,
+            status="fail",
+            evidence="Retired control file re-claimed as planning authority in: "
+            + ", ".join(sorted(set(reclaims))),
+            recommendation=(
+                "State the GitHub Task Issue as the active authority; retired "
+                "control files stay retired even in historical prose."
+            ),
+        )
     issue_contract = _read_text(root / "docs/ai-workflow/TASK_ISSUE_CONTRACT.md")
     agents_text = _read_text(root / "AGENTS.md")
     if issue_contract is not None and agents_text is not None and re.search(
@@ -587,12 +671,27 @@ def _release_documents(root: Path) -> CheckResult:
     if not re.search(r"validat(?:e|ion)", contributing, re.IGNORECASE):
         incomplete.append("CONTRIBUTING.md")
 
-    if missing or incomplete:
+    # The onboarding README must enumerate every existing GitHub workflow so
+    # a new workflow cannot silently escape the documented contract. This is
+    # a known-document contract check, not a semantic review.
+    workflow_root = root / ".github" / "workflows"
+    unlisted_workflows: list[str] = []
+    if workflow_root.is_dir():
+        for workflow in sorted((*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml"))):
+            if workflow.name not in readme:
+                unlisted_workflows.append(workflow.name)
+
+    if missing or incomplete or unlisted_workflows:
         parts: list[str] = []
         if missing:
             parts.append("missing: " + ", ".join(sorted(missing)))
         if incomplete:
             parts.append("incomplete: " + ", ".join(sorted(set(incomplete))))
+        if unlisted_workflows:
+            parts.append(
+                "README.md does not document existing workflows: "
+                + ", ".join(unlisted_workflows)
+            )
         return _result(
             rule_id,
             status="fail",

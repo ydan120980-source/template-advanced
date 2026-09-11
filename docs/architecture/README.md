@@ -16,13 +16,54 @@ The repository targets Python 3.11+ and the Python standard library only.
   - `__main__.py`: `init`, `record`, `summary`, `budget`, `gate`, and `preflight` commands.
   - `config.py` and `models.py`: normalized configuration, event, finding, and report schemas.
   - `ledger.py`: locked, append-only JSONL event persistence and deterministic replay validation.
-  - `budget.py`: privacy-preserving shell-request counting from explicitly supplied session JSONL files.
+  - `budget.py`: privacy-preserving shell-request counting from explicitly supplied
+    session JSONL files (wrapped `custom_tool_call` inputs invoking shell tools and
+    named `function_call` direct shell requests; corrupted evidence raises instead
+    of counting zero).
   - `gate.py`: ownership, artifact, retry, validation, review, liveness, and command-budget evaluation.
   - `preflight.py`: bounded read-only capability probes.
   - `reporters.py`: deterministic JSON and Markdown output.
+- `tools/governance_v2/`
+  - `__main__.py`: `issue` (`init`, `sync`, `verify`, `create`, `append`), `migration`
+    (`build`, `verify`), `bootstrap` (`snapshot`, `plan`), and `gate` (`static`, `github`) commands.
+  - `models.py`: frozen `governance.task/v2` contract and self-verifying event schemas.
+  - `canonical.py`: deterministic canonical JSON digest used by contracts and events.
+  - `issue.py`: contract load/verify/sync, verified Issue creation and readback, verified
+    event appending, and event-chain verification.
+  - `bootstrap.py`: read-only Stage 0 snapshots and desired-plan previews; unavailable refs
+    are distinguished from expected states instead of being cached as facts.
+  - `migration.py`: commit/file matrix build and verify for audited migrations.
+  - `remote.py`: read-only Remote Gate evaluation of GitHub check runs.
+  - `workflow.py`: static workflow/workflow-permission checks.
+- `tools/workflow_eval/`
+  - `__main__.py`: `prepare`, `grade`, and `report` commands for repeatable
+    workflow comparison experiments.
+  - `tasks.py`: task definitions (historical fix, pre-fix baseline, acceptance).
+  - `prepare.py`: generates isolated trial directories and task briefs from a locked
+    historical source snapshot.
+  - `grade.py`: independently executes acceptance against candidate trees and records
+    native command results, scope checks, the narrow pre-scoring Git root probe, and the
+    coordinator's trial-validity attestation.
+  - `audit.py`: audits a trial sub-agent's session record on every tool channel
+    (read, search, write, shell) and reports out-of-trial targets, source-repository
+    contact, path-less calls, and unanchored Git commands as facts.
+  - `report.py`: aggregates trial JSON records into a deterministic Markdown comparison
+    that reports record structure, trial protocol validity, and functional outcome
+    separately.
 - `scripts/` and `evals/`: dependency-free orchestration; they may invoke the Python tools and tests but contain no business logic.
 - `tests/`: isolated `unittest` coverage and fixtures; production modules never import tests.
-- `docs/control/NEXT_CODEX_TASK.md`: sole sprint authority. `.planning/` is local execution evidence and never a second control plane.
+
+## Task Authority And Evidence Responsibility
+
+The verified GitHub Task Issue is the long-lived planning authority: its contract fixes
+the goal, allowed and forbidden paths, acceptance, base SHA, budget, and stop conditions.
+`docs/control/NEXT_CODEX_TASK.md` and the other v1 control files are retired; their
+history remains in Git and `docs/control/CODEX_RUNTIME_PROFILE.md` survives only as
+legacy compatibility reference. Validated offline caches under `.aiwf/cache/`,
+planning journals under `.planning/`, and Run Guard ledgers are execution evidence:
+they may record and subdivide work but cannot expand Issue scope or relax a stop
+condition. Governance evidence events appended to the Task Issue are the durable
+record; local files are supporting evidence only.
 
 ## Dependency Direction
 
@@ -54,6 +95,39 @@ Dependency manifests, lockfiles, CI, global Codex configuration, Hooks, Skills, 
 - Audit commands return `0` ready, `1` valid but not ready, and `2` invalid invocation/configuration/ledger operation.
 
 Rule IDs, event kinds, CLI flags, exit codes, JSON keys, JSONL semantics, ordering, privacy redaction, and lifecycle order are compatibility-sensitive. Changes require explicit scope, regression tests, documentation, and independent review.
+
+### Governance v2
+
+`python -m tools.governance_v2 <issue|migration|bootstrap|gate> <command> ...`
+
+- Contracts use the frozen `governance.task/v2` schema with a self-verifying
+  `contract_digest`; events use a self-verifying digest chain per Task Issue.
+- `issue create` and `issue append` require explicit `--confirm-write` plus a
+  `GH_TOKEN`/`GITHUB_TOKEN` credential, verify every write through a readback,
+  and are the only remote-write paths; every other command is local or read-only.
+- Local commands report JSON with deterministic exit codes: `0` pass,
+  `1` fail, `2` blocked, `3` cached, `4` not run.
+- Failure codes (for example `CONFIRM_WRITE_REQUIRED`, `ISSUE_CONTRACT_CONFLICT`,
+  `EVENT_CHAIN_FORK`) are compatibility-sensitive; never disclose credentials or
+  workstation paths in command results.
+
+### Workflow Eval
+
+`python -m tools.workflow_eval <prepare|grade|report> ...`
+
+- `prepare` materializes isolated trial directories from a locked historical
+  source snapshot plus one task definition; trial copies carry no
+  answer-recoverable Git history.
+- `grade` runs an acceptor against a candidate tree, records the native
+  command exit codes, and enforces the task's scope check.
+- `report` merges trial JSON records into a deterministic Markdown comparison.
+- Trial agents never modify task definitions or acceptors; grades are final
+  only when recomputed on the main thread.
+- Trial validity is never inferred from a grade record. `trial_isolated` records
+  only the pre-scoring Git root probe; `trial_validity` carries the coordinator's
+  VALID / INVALID / UNVERIFIED attestation plus its audit basis. An unattested
+  record is UNVERIFIED and cannot fill a valid comparison slot, and `report`
+  answers record structure, protocol validity, and functional outcome separately.
 
 ## Generated And Local Files
 

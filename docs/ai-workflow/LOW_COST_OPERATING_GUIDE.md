@@ -45,12 +45,14 @@ GitHub Task Issue + validated offline cache
   local diagnostics
 ```
 
-## 3. Web GPT 总控提示词
+## 3. 规划端提示词（可选：Web GPT 等规划助手）
 
-每轮开始时，把下面这段给 Web GPT：
+规划是可选角色：可以直接在 GitHub 上维护 Task Issue，也可以使用 Web GPT 等规划助手辅助。无论使用哪种方式，规划端都不能成为第二个规划权威——一切规划结论都要落到 Task Issue 的合同与事件链上。
+
+每轮开始时，把下面这段给规划助手：
 
 ```text
-你是本项目的 Web GPT / cloud controller。
+你是本项目的规划助手（cloud planner）。
 
 请读取：
 - 当前 GitHub Task Issue 及其治理 v2 合同
@@ -63,7 +65,7 @@ GitHub Task Issue + validated offline cache
 3. 如果 Outcome Impact + Project Value < 7，不要生成实现任务，改为 closeout / context fill / switch axis。
 4. 如果 Verification Confidence <= 2，生成 preflight / read-only probe，不要生成实现任务。
 5. 如果 Boundary Risk >= 4，缩小范围或升级为 Full + reviewer。
-6. 生成一份可直接交给 Codex 执行的有界 Task Packet；不要创建第二个规划权威。
+6. 生成一份可直接交给执行端（Codex）的有界 Task Packet；所有规划变更经治理 CLI 写回 Task Issue，不要创建第二个规划权威。
 
 任务包必须包含：
 - Goal
@@ -106,10 +108,10 @@ If the task needs broader scope, extra files, dependency changes, architecture d
 
 ## 5. Lite 任务包最小模板
 
-日常小任务优先用这个模板，不要复制完整大模板：
+日常小任务优先用这个模板，不要复制完整大模板。任务包是任务 Issue 的本地执行镜像，放在 `.planning/<task-id>/` 下，不能扩大 Issue 范围或放宽停止条件：
 
 ```text
-# NEXT_CODEX_TASK.md
+# Lite Task Packet (mirror of the verified GitHub Task Issue)
 
 Task ID:
 Task Size: Small
@@ -158,10 +160,10 @@ Evidence Ledger
 
 ## 6. Standard 任务包最小模板
 
-中等任务使用：
+中等任务使用，同样只作为任务 Issue 的本地执行镜像：
 
 ```text
-# NEXT_CODEX_TASK.md
+# Standard Task Packet (mirror of the verified GitHub Task Issue)
 
 Task ID:
 Task Size: Medium
@@ -243,10 +245,10 @@ Standard / Full 再写完整 ledger。完整模板见 `EVIDENCE_LEDGER_TEMPLATE.
 
 如果项目连续运行多轮，建议每周或每 5-8 个 sprint 做一次维护：
 
-1. 清理 `SPRINT_LEDGER.md`：保留事实，不补写空话。
-2. 把稳定结论压缩进 `CURRENT_PROJECT_STATE.md`。
+1. 核对任务 Issue 事件链：保持事实完整，不补写空话。
+2. 把已接受的稳定结论压缩进后续 Issue 合同或验证过的离线缓存。
 3. 标记已封板区域为 `BUGFIX_ONLY`。
-4. 删除或归档过期的 `NEXT_CODEX_TASK.md` 内容。
+4. 归档过期的本地任务包与规划日志，保持 `.planning/` 只含活跃证据。
 5. 检查默认验证命令是否仍然有效。
 6. 判断当前主轴是否应该 closeout 或 switch axis。
 
@@ -257,6 +259,6 @@ Standard / Full 再写完整 ledger。完整模板见 `EVIDENCE_LEDGER_TEMPLATE.
 - 不让 Codex 在任务包外自由探索。
 - 不让 helper 模型做最终验收。
 - 不接受没有验证命令或明确原因的完成声明。
-- 不把所有 sprint 结果都塞进 `CURRENT_PROJECT_STATE.md`。
+- 不把所有 sprint 结果都塞进单个 Issue 事件。
 
-最有效的实践是：Web GPT 只更新 `NEXT_CODEX_TASK.md`，Codex 只执行 `NEXT_CODEX_TASK.md`，Evidence Ledger 只记录本轮事实。
+最有效的实践是：规划端只通过治理 CLI 更新 GitHub Task Issue（经确认写入），执行端只执行当前已验证的合同，Evidence Ledger 只记录本轮事实；三个角色可以由不同工具承担，也可以按需合并，但不得产生第二个规划权威。

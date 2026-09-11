@@ -15,13 +15,28 @@ from .models import AuditReport, Finding, LedgerError, build_report
 
 
 _SOURCE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
-_SHELL_CALL_PATTERN = re.compile(r"\btools\s*\.\s*shell_command\s*\(")
-_SHELL_REFERENCE_PATTERN = re.compile(r"\btools\s*\.\s*shell_command\b")
+# Shell-bearing tool functions recognized inside executable tool-input code.
+# `shell_command` is the historical form; `exec_command` is the current host
+# form. Indirect-reference patterns must cover both names.
+_SHELL_CALL_PATTERN = re.compile(
+    r"\btools\s*\.\s*(?:shell_command|exec_command)\s*\("
+)
+_SHELL_REFERENCE_PATTERN = re.compile(
+    r"\btools\s*\.\s*(?:shell_command|exec_command)\b"
+)
 _SHELL_COMPUTED_PATTERN = re.compile(
-    r"\btools\s*\[\s*(['\"])shell_command\1\s*\]"
+    r"\btools\s*\[\s*(['\"])(?:shell_command|exec_command)\1\s*\]"
 )
 _SHELL_DESTRUCTURE_PATTERN = re.compile(
-    r"\{[^{}]*\bshell_command\b[^{}]*\}\s*=\s*tools\b"
+    r"\{[^{}]*\b(?:shell_command|exec_command)\b[^{}]*\}\s*=\s*tools\b"
+)
+# Named function_call events whose tool name itself executes shell commands
+# count as direct shell requests. The allowlist is deliberately conservative
+# and case-insensitive: it covers the documented host variants (Codex `shell`
+# / `exec`, host `Bash`, and the legacy `shell_command` / `exec_command`
+# names) instead of trying to infer shell semantics from arguments.
+_SHELL_FUNCTION_NAMES = frozenset(
+    {"exec", "shell", "shell_command", "exec_command", "bash"}
 )
 
 
@@ -150,13 +165,22 @@ def _session_shell_call_ids(
     end: datetime,
 ) -> tuple[str, ...]:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise LedgerError(
             f"cannot read session evidence for source {source_id}: {type(exc).__name__}"
         ) from exc
+    # Session JSONL is newline-delimited, but string literals may legally
+    # contain U+2028/U+2029/U+0085. str.splitlines() would split inside
+    # those strings and corrupt otherwise-valid lines, so split strictly
+    # on the record delimiter. One trailing newline is a terminator, not
+    # an extra blank record; interior blank lines remain corruption.
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
     call_ids: list[str] = []
     for line_number, line in enumerate(lines, 1):
+        line = line.rstrip("\r")
         if not line.strip():
             raise LedgerError(
                 f"blank session evidence line for source {source_id} at {line_number}"
@@ -171,23 +195,21 @@ def _session_shell_call_ids(
             raise LedgerError(
                 f"non-object session evidence for source {source_id} at {line_number}"
             )
-        payload = raw.get("payload")
-        if (
-            raw.get("type") != "response_item"
-            or not isinstance(payload, dict)
-            or payload.get("type") != "custom_tool_call"
-            or not _invokes_shell_command(payload.get("input"))
+        if raw.get("type") == "response_item" and not isinstance(
+            raw.get("payload"), dict
         ):
-            continue
-        timestamp = raw.get("timestamp")
-        if not isinstance(timestamp, str):
+            # A wrapped event whose payload is not an object cannot be
+            # classified; that is corrupted evidence, not a zero count.
             raise LedgerError(
-                f"shell evidence lacks timestamp for source {source_id} at {line_number}"
+                f"response_item payload is not an object for source {source_id} "
+                f"at {line_number}"
             )
-        observed = _parse_timestamp(timestamp)
+        if not _is_shell_request(raw):
+            continue
+        observed = _event_time(raw, source_id, line_number)
         if observed < start or observed > end:
             continue
-        call_id = payload.get("call_id")
+        call_id = _request_identity(raw)
         if not isinstance(call_id, str) or not call_id.strip():
             raise LedgerError(
                 f"shell evidence lacks call_id for source {source_id} at {line_number}"
@@ -196,8 +218,110 @@ def _session_shell_call_ids(
     return tuple(sorted(call_ids))
 
 
+def _event_time(raw: Mapping[str, object], source_id: str, line_number: int) -> datetime:
+    """Return one shell event's wall-clock time.
+
+    Timestamps are either ISO-8601 strings (Codex rollouts) or numeric Unix
+    epoch milliseconds (host session events). Anything else — including
+    booleans and implausible epoch values — is corrupted evidence and raises
+    instead of silently counting zero.
+    """
+
+    timestamp = raw.get("timestamp")
+    if isinstance(timestamp, bool):
+        raise LedgerError(
+            f"shell evidence timestamp is invalid for source {source_id} at {line_number}"
+        )
+    if isinstance(timestamp, (int, float)):
+        millis = float(timestamp)
+        # NaN fails this comparison, so it is rejected here as well.
+        if not millis >= 1_000_000_000_000:
+            raise LedgerError(
+                f"shell evidence timestamp is invalid for source {source_id} at {line_number}"
+            )
+        try:
+            return datetime.fromtimestamp(millis / 1000.0, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError) as exc:
+            raise LedgerError(
+                f"shell evidence timestamp is invalid for source {source_id} at {line_number}"
+            ) from exc
+    if isinstance(timestamp, str) and timestamp.strip():
+        return _parse_timestamp(timestamp)
+    raise LedgerError(
+        f"shell evidence lacks timestamp for source {source_id} at {line_number}"
+    )
+
+
+def _payload_of(raw: Mapping[str, object]) -> Mapping[str, object] | None:
+    """Return the tool-call payload for wrapped or unwrapped event forms."""
+
+    if raw.get("type") == "response_item":
+        payload = raw.get("payload")
+        return payload if isinstance(payload, Mapping) else None
+    if raw.get("type") == "function_call":
+        return raw
+    return None
+
+
+def _is_shell_request(raw: Mapping[str, object]) -> bool:
+    """Classify one session event as a shell-bearing outer tool request.
+
+    Supported forms:
+
+    - ``response_item`` wrapping a ``custom_tool_call`` whose string input
+      invokes ``tools.shell_command(...)`` or ``tools.exec_command(...)``
+      (historical and current host forms; the tool name field is not
+      required for this classification);
+    - a named ``function_call`` — wrapped or top-level — whose tool name is
+      in the conservative shell-function allowlist (direct shell call).
+
+    Everything else (messages, reasoning, other tools, pure-wait calls) is
+    not a shell request. Corrupted shell-relevant events raise LedgerError
+    instead of silently counting zero.
+    """
+
+    payload = _payload_of(raw)
+    if payload is None:
+        return False
+    payload_type = payload.get("type")
+    if payload_type == "custom_tool_call":
+        # A custom_tool_call without a plain-string input cannot be
+        # classified; that is corrupted evidence, not a zero count.
+        if not isinstance(payload.get("input"), str):
+            raise LedgerError("custom_tool_call input is not a plain string")
+        return _invokes_shell_command(payload["input"])
+    if payload_type == "function_call":
+        return _is_shell_function_name(payload.get("name"))
+    return False
+
+
+def _is_shell_function_name(name: object) -> bool:
+    if not isinstance(name, str) or not name.strip():
+        raise LedgerError("function_call lacks a tool name")
+    return name.strip().lower() in _SHELL_FUNCTION_NAMES
+
+
+def _request_identity(raw: Mapping[str, object]) -> object:
+    """Return the outer request identity (``call_id``/``callId``)."""
+
+    payload = _payload_of(raw)
+    if payload is None:
+        return None
+    for key in ("call_id", "callId"):
+        if key in payload:
+            return payload[key]
+    return None
+
+
 def _invokes_shell_command(value: object) -> bool:
-    """Recognize direct shell calls and reject unsafe indirect evidence."""
+    """Recognize direct shell calls and reject unsafe indirect evidence.
+
+    The check runs on executable code regions only: string literals,
+    template literals, and comments are blanked first. Besides direct calls
+    of ``tools.shell_command`` / ``tools.exec_command``, any recognizable
+    indirect reference (aliasing, computed access, destructuring) is an
+    explicit error because the request cannot be attributed reliably.
+    """
 
     if not isinstance(value, str):
         return False
@@ -208,12 +332,12 @@ def _invokes_shell_command(value: object) -> bool:
         match.start() not in direct_starts
         for match in _SHELL_REFERENCE_PATTERN.finditer(cleaned)
     ):
-        raise LedgerError("unsupported indirect shell_command reference")
+        raise LedgerError("unsupported indirect shell reference")
     if _SHELL_DESTRUCTURE_PATTERN.search(cleaned):
-        raise LedgerError("unsupported destructured shell_command reference")
+        raise LedgerError("unsupported destructured shell reference")
     for match in _SHELL_COMPUTED_PATTERN.finditer(value):
         if cleaned[match.start() : match.start() + len("tools")] == "tools":
-            raise LedgerError("unsupported computed shell_command reference")
+            raise LedgerError("unsupported computed shell reference")
     return bool(direct)
 
 

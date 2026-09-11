@@ -145,6 +145,19 @@ def write_session(
     return path
 
 
+def write_rows(path: Path, rows: list[dict[str, object]]) -> Path:
+    path.write_text(
+        "\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _ts(seconds: int) -> str:
+    moment = datetime(2026, 7, 31, tzinfo=timezone.utc) + timedelta(seconds=seconds)
+    return moment.isoformat().replace("+00:00", "Z")
+
+
 class CommandBudgetTests(unittest.TestCase):
     def test_shell_classifier_excludes_literals_and_comments(self) -> None:
         self.assertTrue(_invokes_shell_command("await tools.shell_command({command:'x'})"))
@@ -162,6 +175,332 @@ class CommandBudgetTests(unittest.TestCase):
             _invokes_shell_command("await tools['shell_command']({})")
         with self.assertRaises(LedgerError):
             _invokes_shell_command("const {shell_command: run} = tools; await run({})")
+
+    def test_shell_classifier_covers_exec_command_like_shell_command(self) -> None:
+        self.assertTrue(_invokes_shell_command("await tools.exec_command({command:'x'})"))
+        self.assertTrue(_invokes_shell_command("await tools . exec_command ({command:'x'})"))
+        self.assertFalse(_invokes_shell_command("const x = 'tools.exec_command({})'"))
+        self.assertFalse(_invokes_shell_command("const x = `tools.exec_command({})`"))
+        self.assertTrue(
+            _invokes_shell_command("const x = `${await tools.exec_command({command:'x'})}`")
+        )
+        self.assertFalse(_invokes_shell_command("// tools.exec_command({})\nawait tools.apply_patch('x')"))
+        self.assertFalse(_invokes_shell_command("/* tools.exec_command({}) */ tools.apply_patch('x')"))
+        with self.assertRaises(LedgerError):
+            _invokes_shell_command("const run = tools.exec_command; await run({})")
+        with self.assertRaises(LedgerError):
+            _invokes_shell_command("await tools['exec_command']({})")
+        with self.assertRaises(LedgerError):
+            _invokes_shell_command("const {exec_command: run} = tools; await run({})")
+
+    def test_current_host_forms_count_once_per_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            run = BudgetRun(root, budget_config(limit=5, sources=("main",)))
+            session = write_rows(
+                root / "current-host.jsonl",
+                [
+                    # Current confirmed form: custom_tool_call named exec whose
+                    # input invokes tools.exec_command(...).
+                    {
+                        "timestamp": _ts(10),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "name": "exec",
+                            "call_id": "exec-001",
+                            "input": "await tools.exec_command({command:'probe'})",
+                        },
+                    },
+                    # One outer request batching other tool calls with shell
+                    # calls counts exactly once.
+                    {
+                        "timestamp": _ts(20),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "name": "exec",
+                            "call_id": "exec-002",
+                            "input": (
+                                "await tools.web__run({}); "
+                                "await tools.exec_command({command:'a'}); "
+                                "await tools.shell_command({command:'b'})"
+                            ),
+                        },
+                    },
+                    # Named function_call whose tool name is a shell tool is a
+                    # direct shell request; arguments are not interpreted.
+                    {
+                        "timestamp": _ts(30),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call",
+                            "name": "shell",
+                            "call_id": "fn-shell-001",
+                            "arguments": '{"command": ["probe"]}',
+                        },
+                    },
+                    # Named function_call for a non-shell tool is not counted.
+                    {
+                        "timestamp": _ts(40),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call",
+                            "name": "request_user_input",
+                            "call_id": "fn-rui-001",
+                            "arguments": '{"question": "tools.exec_command({})"}',
+                        },
+                    },
+                    # Unwrapped top-level host function_call with a shell tool
+                    # name counts using its callId identity.
+                    {
+                        "timestamp": _ts(50),
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-001",
+                        "arguments": '{"command": "probe"}',
+                    },
+                    # Unwrapped non-shell function_call is not counted.
+                    {
+                        "timestamp": _ts(60),
+                        "type": "function_call",
+                        "name": "Read",
+                        "callId": "wb-002",
+                        "arguments": '{"file": "x.py"}',
+                    },
+                    # Pure-wait tool requests are not shell requests.
+                    {
+                        "timestamp": _ts(70),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "call_id": "wait-001",
+                            "input": "await tools.wait({seconds: 5})",
+                        },
+                    },
+                    # String-literal and comment mentions never count.
+                    {
+                        "timestamp": _ts(80),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "call_id": "str-001",
+                            "input": (
+                                "const s = 'tools.exec_command({})'; "
+                                "await tools.apply_patch(s)"
+                            ),
+                        },
+                    },
+                    {
+                        "timestamp": _ts(90),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "call_id": "cmt-001",
+                            "input": "// tools.exec_command({})\nawait tools.apply_patch('x')",
+                        },
+                    },
+                ],
+            )
+            report = run.snapshot({"main": session})
+
+        self.assertEqual(report.exit_code, 0)
+        self.assertEqual(report.metadata["total"], 4)
+        self.assertEqual(report.metadata["source_counts"], {"main": 4})
+        self.assertEqual(report.metadata["unique_call_ids"], 4)
+
+    def test_corrupted_current_host_events_raise(self) -> None:
+        cases: list[list[dict[str, object]]] = [
+            # A custom_tool_call input that is not a plain string cannot be
+            # classified and must not look like a complete zero count.
+            [
+                {
+                    "timestamp": _ts(10),
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "exec-bad",
+                        "input": {"command": "ls"},
+                    },
+                }
+            ],
+            # A named-function_call event without a tool name is corrupted.
+            [
+                {
+                    "timestamp": _ts(10),
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "call_id": "fn-noname",
+                        "arguments": "{}",
+                    },
+                }
+            ],
+            # A shell function_call without any request identity is corrupted.
+            [
+                {
+                    "timestamp": _ts(10),
+                    "type": "response_item",
+                    "payload": {
+                        "type": "function_call",
+                        "name": "shell",
+                        "arguments": "{}",
+                    },
+                }
+            ],
+            # An unwrapped shell function_call without call_id/callId fails.
+            [
+                {
+                    "timestamp": _ts(10),
+                    "type": "function_call",
+                    "name": "Bash",
+                    "arguments": "{}",
+                }
+            ],
+            # Indirect exec_command references stay rejected.
+            [
+                {
+                    "timestamp": _ts(10),
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "exec-alias",
+                        "input": "const run = tools.exec_command; await run({})",
+                    },
+                }
+            ],
+        ]
+        for rows in cases:
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                run = BudgetRun(root, budget_config(limit=5, sources=("main",)))
+                session = write_rows(root / "corrupt.jsonl", rows)
+                with self.assertRaises(LedgerError):
+                    run.snapshot({"main": session})
+
+    def test_window_boundaries_apply_to_new_host_forms(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            run = BudgetRun(root, budget_config(limit=5, sources=("main",)))
+            session = write_rows(
+                root / "window.jsonl",
+                [
+                    # One second before the window opens: excluded.
+                    {
+                        "timestamp": _ts(-1),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "name": "exec",
+                            "call_id": "exec-early",
+                            "input": "await tools.exec_command({command:'x'})",
+                        },
+                    },
+                    # Exactly at window start: included.
+                    {
+                        "timestamp": START,
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call",
+                            "name": "shell",
+                            "call_id": "fn-at-start",
+                            "arguments": "{}",
+                        },
+                    },
+                    # Exactly at window end: included.
+                    {
+                        "timestamp": END,
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-at-end",
+                        "arguments": "{}",
+                    },
+                    # One second after the window closes: excluded.
+                    {
+                        "timestamp": _ts(601),
+                        "type": "function_call",
+                        "name": "bash",
+                        "callId": "wb-late",
+                        "arguments": "{}",
+                    },
+                ],
+            )
+            report = run.snapshot({"main": session})
+
+        self.assertEqual(report.metadata["total"], 2)
+        self.assertEqual(report.metadata["unique_call_ids"], 2)
+
+    def test_duplicate_ids_across_old_and_new_forms_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            run = BudgetRun(root, budget_config(limit=5, sources=("main", "reviewer")))
+            legacy = write_session(root / "legacy.jsonl", "main", 1, call_ids=["dup"])
+            modern = write_rows(
+                root / "modern.jsonl",
+                [
+                    {
+                        "timestamp": START,
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "name": "exec",
+                            "call_id": "dup",
+                            "input": "await tools.exec_command({command:'x'})",
+                        },
+                    }
+                ],
+            )
+            with self.assertRaises(LedgerError):
+                run.snapshot({"main": legacy, "reviewer": modern})
+
+    def test_mixed_legacy_and_current_formats_replay_together(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            run = BudgetRun(root, budget_config(limit=5, sources=("main", "reviewer")))
+            legacy = write_session(root / "legacy.jsonl", "main", 2)
+            modern = write_rows(
+                root / "modern.jsonl",
+                [
+                    {
+                        "timestamp": _ts(30),
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "name": "exec",
+                            "call_id": "exec-mixed",
+                            "input": "await tools.exec_command({command:'x'})",
+                        },
+                    },
+                    {
+                        "timestamp": _ts(31),
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-mixed",
+                        "arguments": "{}",
+                    },
+                ],
+            )
+            legacy_only = run.snapshot({"main": legacy, "reviewer": write_rows(root / "empty-legacy.jsonl", [
+                {
+                    "timestamp": START,
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "call_id": "legacy-keep",
+                        "input": "await tools.apply_patch('not shell')",
+                    },
+                }
+            ])})
+            combined = run.snapshot({"main": legacy, "reviewer": modern})
+
+        # The historical replay alone counts only shell_command requests; the
+        # combined replay counts old and new formats once per request.
+        self.assertEqual(legacy_only.exit_code, 0)
+        self.assertEqual(legacy_only.metadata["total"], 2)
+        self.assertEqual(combined.exit_code, 0)
+        self.assertEqual(combined.metadata["total"], 4)
+        self.assertEqual(combined.metadata["source_counts"], {"main": 2, "reviewer": 2})
+
 
     def test_historical_shape_aggregates_134_and_redacts_command_text(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -297,6 +636,181 @@ class CommandBudgetTests(unittest.TestCase):
         budget_finding = next(item for item in report.findings if item.finding_id == "budget.commands")
         self.assertEqual(budget_finding.status, "skip")
         self.assertEqual(report.status, "ready")
+
+    def test_session_strings_with_unicode_line_separators_stay_intact(self) -> None:
+        # Real session JSONL may contain raw U+2028/U+0085 inside string
+        # literals. Splitting on anything but the newline record delimiter
+        # would corrupt the JSON and must not happen.
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            run = BudgetRun(root, budget_config(limit=5, sources=("main",)))
+            payload_input = (
+                "await tools.exec_command({command:'probe \u2028 next \u0085 line'})"
+            )
+            rows = [
+                {
+                    "timestamp": _ts(10),
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "name": "exec",
+                        "call_id": "exec-u2028",
+                        "input": payload_input,
+                    },
+                },
+                {
+                    "timestamp": _ts(11),
+                    "type": "response_item",
+                    "payload": {
+                        "type": "custom_tool_call",
+                        "name": "exec",
+                        "call_id": "exec-after",
+                        "input": "await tools.exec_command({command:'ok'})",
+                    },
+                },
+            ]
+            body = "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
+            assert "\u2028" in body and "\u0085" in body
+            session = root / "unicode-line-seps.jsonl"
+            session.write_text(body, encoding="utf-8")
+            report = run.snapshot({"main": session})
+
+        self.assertEqual(report.exit_code, 0)
+        self.assertEqual(report.metadata["total"], 2)
+
+    def test_numeric_epoch_millisecond_timestamps_are_supported(self) -> None:
+        # Host session events carry Unix epoch milliseconds; ISO strings stay
+        # supported; implausible numerics are corrupted evidence.
+        window_start_ms = 1788965320857  # inside-window reference (int millis)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            run = BudgetRun(root, budget_config(limit=5, sources=("main",)))
+            start_iso = (
+                datetime.fromtimestamp(window_start_ms / 1000, tz=timezone.utc)
+                - timedelta(seconds=30)
+            ).isoformat()
+            end_iso = (
+                datetime.fromtimestamp(window_start_ms / 1000, tz=timezone.utc)
+                + timedelta(seconds=30)
+            ).isoformat()
+            session = write_rows(
+                root / "millis.jsonl",
+                [
+                    {
+                        "timestamp": window_start_ms,
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-millis",
+                        "arguments": "{}",
+                    },
+                    {
+                        "timestamp": window_start_ms + 1000,
+                        "type": "function_call",
+                        "name": "bash",
+                        "callId": "wb-millis-2",
+                        "arguments": "{}",
+                    },
+                    {
+                        "timestamp": window_start_ms - 60_000,
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-millis-early",
+                        "arguments": "{}",
+                    },
+                ],
+            )
+            report = snapshot_command_budget(
+                run.plan,
+                agent="main",
+                workstream="integration",
+                sessions={"main": session},
+                start=start_iso,
+                end=end_iso,
+            )
+            seconds_plan = BudgetRun(
+                root / "seconds", budget_config(limit=5, sources=("main",))
+            )
+            seconds_session = write_rows(
+                root / "seconds.jsonl",
+                [
+                    {
+                        "timestamp": 1_788_965_320,  # epoch seconds: not millis
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-seconds",
+                        "arguments": "{}",
+                    }
+                ],
+            )
+            with self.assertRaises(LedgerError):
+                snapshot_command_budget(
+                    seconds_plan.plan,
+                    agent="main",
+                    workstream="integration",
+                    sessions={"main": seconds_session},
+                    start=start_iso,
+                    end=end_iso,
+                )
+
+        self.assertEqual(report.exit_code, 0)
+        self.assertEqual(report.metadata["total"], 2)
+
+    def test_corrupted_payload_and_extreme_timestamps_raise(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            run = BudgetRun(root, budget_config(limit=5, sources=("main",)))
+            corrupted_payload = write_rows(
+                root / "corrupt-payload.jsonl",
+                [
+                    {
+                        "timestamp": START,
+                        "type": "response_item",
+                        # A wrapped event whose payload is not an object
+                        # cannot be classified: explicit corruption.
+                        "payload": "not-an-object",
+                    },
+                    {
+                        "timestamp": START,
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "name": "exec",
+                            "call_id": "after-corrupt",
+                            "input": "await tools.exec_command({command:'x'})",
+                        },
+                    },
+                ],
+            )
+            infinite_timestamp = write_rows(
+                root / "infinite-timestamp.jsonl",
+                [
+                    {
+                        "timestamp": float("inf"),
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-inf",
+                        "arguments": "{}",
+                    }
+                ],
+            )
+            huge_timestamp = write_rows(
+                root / "huge-timestamp.jsonl",
+                [
+                    {
+                        "timestamp": 1e300,
+                        "type": "function_call",
+                        "name": "Bash",
+                        "callId": "wb-huge",
+                        "arguments": "{}",
+                    }
+                ],
+            )
+            with self.assertRaises(LedgerError):
+                run.snapshot({"main": corrupted_payload})
+            with self.assertRaises(LedgerError):
+                run.snapshot({"main": infinite_timestamp})
+            with self.assertRaises(LedgerError):
+                run.snapshot({"main": huge_timestamp})
 
     def test_budget_cli_exit_codes_zero_one_and_two(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
