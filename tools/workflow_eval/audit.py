@@ -14,8 +14,8 @@ This module reports facts:
   frozen Run Guard parser, so the two independent implementations can be
   cross-checked by test;
 - each call's absolute path arguments classified as inside the trial
-  directory, inside a declared neutral scratch root, inside the source
-  repository, or elsewhere;
+  directory, inside the source repository, inside a declared neutral
+  scratch root, or elsewhere;
 - read/search calls that name no explicit path, which therefore run against
   the host's default working directory rather than the trial directory;
 - shell commands that mention ``git`` without anchoring themselves inside the
@@ -92,6 +92,10 @@ _MSYS_DRIVE = re.compile(r"^/([A-Za-z])/(.*)$")
 # Temp scratch is neutral: it cannot carry repository answers, so a trial that
 # writes a throwaway script there has deviated from "work only inside this
 # directory" without gaining access to the solution. Still reported.
+# These roots are a heuristic fallback, not an override: the explicitly
+# declared source repository is checked *before* them (see ``_scope_of``),
+# because a source repository that happens to live under a default scratch
+# root -- Linux CI's ``/tmp`` -- is still the source repository.
 _DEFAULT_SCRATCH = (
     "c:/windows/temp",
     "/tmp",
@@ -129,11 +133,19 @@ def _is_absolute(value: str) -> bool:
 def _scope_of(target: str, *, trial_dir: str, source_repo: str, scratch) -> str:
     if _is_within(target, trial_dir):
         return "trial"
+    # The source repository outranks scratch roots. ``source_repo`` is an
+    # explicit, caller-declared location that holds the fixed answer, while
+    # the scratch roots are generic heuristics: on Linux CI the synthesised
+    # source repository itself sits under ``/tmp``, and classifying it as
+    # neutral scratch would hide exactly the violation the audit exists to
+    # report. Caller-declared scratch roots lose to the source repository for
+    # the same reason -- a scratch root that encloses the answer repository
+    # is a misconfiguration, and the conservative reading reports the leak.
+    if source_repo and _is_within(target, source_repo):
+        return "source_repo"
     for root in scratch:
         if _is_within(target, root):
             return "scratch"
-    if source_repo and _is_within(target, source_repo):
-        return "source_repo"
     return "other"
 
 

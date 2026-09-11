@@ -245,8 +245,11 @@ def _is_top_level_work_tree(root: Path) -> bool:
     )
     if completed.returncode != 0:
         return False
-    resolved_top = os.path.normcase(os.path.abspath(completed.stdout.strip()))
-    return resolved_top == os.path.normcase(os.path.abspath(str(root)))
+    # Same normalisation as the trial isolation probe: Git reports the
+    # physical toplevel (symlinks on macOS, long names on Windows), while the
+    # handed-in root may spell the identical directory differently.
+    resolved_top = os.path.normcase(os.path.realpath(completed.stdout.strip()))
+    return resolved_top == os.path.normcase(os.path.realpath(str(root)))
 
 
 def _stage_candidate_tree(candidate_root: Path, staging_root: Path) -> None:

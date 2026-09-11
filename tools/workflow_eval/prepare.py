@@ -208,8 +208,14 @@ def trial_isolation_problem(trial_dir: Path) -> str | None:
     )
     if completed.returncode != 0:
         return f"cannot resolve the trial repository toplevel: {completed.stderr.strip()}"
-    resolved = os.path.normcase(os.path.abspath(completed.stdout.strip()))
-    expected = os.path.normcase(os.path.abspath(str(trial_dir)))
+    # Git reports the *physical* toplevel: it resolves symlinked ancestors
+    # (macOS ``/var`` -> ``/private/var``) and 8.3 short path components
+    # (Windows ``RUNNER~1``). The trial directory as handed in may spell the
+    # same location logically, so both sides go through ``realpath`` before
+    # the case-folded comparison. ``abspath`` alone would reject perfectly
+    # isolated trials on CI hosts whose temp roots use those spellings.
+    resolved = os.path.normcase(os.path.realpath(completed.stdout.strip()))
+    expected = os.path.normcase(os.path.realpath(str(trial_dir)))
     if resolved != expected:
         return (
             "trial directory is not Git-isolated: rev-parse --show-toplevel "

@@ -1207,9 +1207,16 @@ class ExportPathSemanticsTests(unittest.TestCase):
         self.assertEqual(target, destination / "tools" / "example.py")
         self.assertTrue(target.is_absolute())
         self.assertFalse(str(target).startswith("\\\\?\\"))
+        # ``TemporaryDirectory`` may hand out a path spelled with an 8.3
+        # short component (Windows CI: ``RUNNER~1``) while ``resolve()``
+        # expands it (``runneradmin``). Both spell the same directory, so
+        # the containment check compares physical forms on both sides.
+        resolved_target = os.path.realpath(str(target))
+        resolved_destination = os.path.realpath(str(expected_destination))
         self.assertTrue(
-            str(target).startswith(str(expected_destination)),
-            f"{target} is not under the expected destination {expected_destination}",
+            resolved_target.startswith(resolved_destination),
+            f"{resolved_target} is not under the expected destination "
+            f"{resolved_destination}",
         )
 
     def test_foreign_concrete_path_types_are_not_instantiable(self) -> None:

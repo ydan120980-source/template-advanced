@@ -63,6 +63,15 @@ release tags exist.
 - The release-determinism eval covers publication digest selection
   deterministically — missing, duplicate, and mismatched digest files plus a
   payload-digest decoy — with a hardened regression guard (#24).
+- Cross-platform CI path spellings no longer break the workflow eval harness
+  (#25): Git-isolation probes and the acceptor toplevel check compare
+  `realpath`-normalised physical paths on both sides, so a symlinked temp
+  root (macOS `/var` -> `/private/var`) or an 8.3 short component (Windows
+  `RUNNER~1` -> `runneradmin`) no longer rejects a perfectly isolated trial;
+  and the session audit classifies the explicitly declared source repository
+  before generic scratch roots, so a source repository placed under Linux
+  `/tmp` is reported as source-repository contact instead of neutral
+  scratch.
 
 ## [2.0.0] - 2026-08-04
 
