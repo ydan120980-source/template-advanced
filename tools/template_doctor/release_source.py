@@ -24,9 +24,12 @@ Only the Python standard library is used.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+from .content_selection import decode_nul_paths
 
 
 class ReleaseSourceError(RuntimeError):
@@ -57,14 +60,27 @@ def _run_git(root: Path, *arguments: str, timeout: int = 60) -> subprocess.Compl
     )
 
 
+def _run_git_bytes(
+    root: Path, *arguments: str, timeout: int = 60
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+    )
+
+
 def _git_top_level(root: Path) -> str | None:
     try:
-        completed = _run_git(root, "rev-parse", "--show-toplevel", timeout=10)
+        completed = _run_git_bytes(root, "rev-parse", "--show-toplevel", timeout=10)
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return None
     if completed.returncode != 0:
         return None
-    return completed.stdout.strip() or None
+    value = completed.stdout.rstrip(b"\r\n")
+    return os.fsdecode(value) if value else None
 
 
 def is_git_work_tree(root: Path | str) -> bool:
@@ -86,29 +102,46 @@ def _is_regular_blob(mode: str) -> bool:
     return mode.startswith("100")
 
 
-def _tracked_modes(root: Path, relative_paths: list[str]) -> dict[str, int]:
-    """Return the Git index mode for every path.
+def _head_modes(root: Path, relative_paths: list[str]) -> dict[str, int]:
+    """Return the Git HEAD mode for every regular release path.
 
-    Only the executable bit from the index is used; everything else
+    Only the executable bit from HEAD is used; everything else
     (read/write bits, file type) is intentionally ignored. Git work trees on
     Windows commonly store ``100644`` for shell scripts that must run with
-    ``0755`` intent, so the trusted builder combines the index mode with the
+    ``0755`` intent, so the trusted builder combines the HEAD mode with the
     same naming contract the inventory uses (``*.sh`` is intended executable).
     """
 
     if not relative_paths:
         return {}
-    completed = _run_git(root, "ls-files", "--stage", "--", *relative_paths)
+    completed = _run_git_bytes(
+        root,
+        "ls-tree",
+        "-r",
+        "-z",
+        "HEAD",
+        "--",
+        *relative_paths,
+    )
+    if completed.returncode != 0:
+        diagnostic = os.fsdecode(completed.stderr).strip()
+        raise ReleaseSourceError(
+            "git ls-tree failed while reading release modes"
+            + (f": {diagnostic}" if diagnostic else "")
+        )
     modes: dict[str, int] = {}
-    for line in completed.stdout.splitlines():
-        parts = line.split("\t")
-        if len(parts) != 2:
+    for record in completed.stdout.split(b"\x00"):
+        if not record:
             continue
-        meta = parts[0].split(" ")
-        if len(meta) < 2:
+        try:
+            metadata, raw_path = record.split(b"\t", 1)
+        except ValueError:
             continue
-        mode_text = meta[0]
-        path = parts[1]
+        fields = metadata.split()
+        if len(fields) < 3:
+            continue
+        mode_text = fields[0].decode("ascii", errors="strict")
+        path = os.fsdecode(raw_path)
         if not _is_regular_blob(mode_text):
             continue
         try:
@@ -124,6 +157,34 @@ def _tracked_modes(root: Path, relative_paths: list[str]) -> dict[str, int]:
             mode = 0o100644
         modes[path] = mode
     return modes
+
+
+def _tracked_modes(root: Path, relative_paths: list[str]) -> dict[str, int]:
+    """Compatibility alias; trusted release modes are bound to HEAD."""
+
+    return _head_modes(root, relative_paths)
+
+
+def _staged_release_paths(root: Path, relative_paths: list[str]) -> list[str]:
+    if not relative_paths:
+        return []
+    completed = _run_git_bytes(
+        root,
+        "diff",
+        "--cached",
+        "--name-only",
+        "-z",
+        "HEAD",
+        "--",
+        *relative_paths,
+    )
+    if completed.returncode != 0:
+        diagnostic = os.fsdecode(completed.stderr).strip()
+        raise ReleaseSourceError(
+            "git diff --cached failed while checking release paths"
+            + (f": {diagnostic}" if diagnostic else "")
+        )
+    return decode_nul_paths(completed.stdout)
 
 
 def _read_blobs_at_commit(

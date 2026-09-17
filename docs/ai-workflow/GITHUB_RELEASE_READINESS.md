@@ -7,11 +7,12 @@ published release.
 The repository is licensed under the Apache License 2.0; release candidates
 must retain the tracked `LICENSE` and `NOTICE` files.
 
-## Local candidate gate
+## Local authority and candidate gate
 
-- [ ] The active Task Issue contract is verified and its base SHA is frozen.
+- [ ] The active `governance.task/v2` contract is verified and its base SHA is frozen. Before a Task Issue exists, this may be an explicitly owner-approved and verified `local_bootstrap`; after Issue adoption, the Task Issue is the long-lived authority.
+- [ ] A local bootstrap, when used, is bound to the independently approved contract digest, repository identity, and Git base; it reports remote gates as `NOT_RUN`, grants no GitHub write authority, and has no pending adoption/dual-authority handoff.
 - [ ] Offline cache, if used, returns `CACHED`, has a valid digest, and does
-  not claim remote checks.
+  not claim bootstrap authority or remote checks.
 - [ ] `py -3 -B -m unittest discover -s tests` passes, plus focused governance,
   Run Guard, Template Doctor, and release-readiness suites.
 - [ ] `bash scripts/verify.sh` and `bash evals/run-evals.sh` pass with native
@@ -29,6 +30,8 @@ must retain the tracked `LICENSE` and `NOTICE` files.
   runtime outputs are in the candidate source tree.
 
 ## Remote gate
+
+Local bootstrap evidence and local candidate evidence never satisfy this section. After a Task Issue is created/adopted, verify the adoption event/receipt before relying on that Issue as the active authority.
 
 Before a remote merge, `gate github` must bind the expected workflow and
 Check Run to the exact PR head SHA. The workflow must be active, jobs must be

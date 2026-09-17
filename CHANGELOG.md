@@ -8,6 +8,41 @@ release tags exist.
 
 No changes yet.
 
+## [2.2.0] - 2026-09-17
+
+### Added
+
+- A digest-bound local bootstrap authority closes the pre-Issue planning gap
+  without granting remote writes. Adoption into a matching GitHub Task Issue
+  is read-only, tamper-evident, idempotent, and fail-closed during handoff.
+- `scripts/invoke-git-bash.py` locates Git for Windows Bash directly, providing
+  a supported native entry point when PowerShell script execution is
+  restricted without changing the machine Execution Policy.
+
+### Changed
+
+- Template Doctor now evaluates tracked content plus untracked, non-ignored
+  release-relevant content. Ignored Node, Python, and Rust build outputs no
+  longer create false findings, while tracked files remain in scope even when
+  their directory names resemble generated output.
+- Release readiness documentation distinguishes temporary local bootstrap
+  authority, verified Issue adoption, long-lived Task Issue authority, local
+  evidence, and exact-SHA remote gates.
+
+### Fixed
+
+- Windows subprocess handling now separates console diagnostics from pathname
+  protocols, preserves raw non-UTF-8 Git pathname identity through binary NUL
+  framing and `surrogateescape`, and handles non-ASCII and long filesystem
+  paths without replacement decoding.
+- Bootstrap adoption accepts a later candidate as the event-chain subject
+  without confusing it with the contract base, while preserving single-subject
+  chain validation.
+- Immutable bootstrap authority, pending, and receipt records use create-only
+  atomic publication. Receipt integrity binds the complete adoption event and
+  rejects raw or rehashed tampering, duplicate matches, torn writes, and stale
+  remote evidence without weakening the remote-write boundary.
+
 ## [2.1.0] - 2026-09-11
 
 ### Added

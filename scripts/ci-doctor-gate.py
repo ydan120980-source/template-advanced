@@ -71,9 +71,13 @@ def main(argv: list[str] | None = None) -> int:
             capture_output=True,
             text=True,
             encoding="utf-8",
-            errors="replace",
             timeout=300,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            env={
+                **os.environ,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONIOENCODING": "utf-8",
+                "PYTHONUTF8": "1",
+            },
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         print(f"ci-doctor-gate: invocation failed: {type(exc).__name__}: {exc}", file=sys.stderr)

@@ -53,8 +53,12 @@ def run_python(*arguments: str, cwd: Path | None = None) -> subprocess.Completed
         capture_output=True,
         text=True,
         encoding="utf-8",
-        errors="replace",
-        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        env={
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1",
+        },
     )
 
 
@@ -466,8 +470,12 @@ elif case == "clean-template-init":
             capture_output=True,
             text=True,
             encoding="utf-8",
-            errors="replace",
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            env={
+                **os.environ,
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONIOENCODING": "utf-8",
+                "PYTHONUTF8": "1",
+            },
         )
         if doctor.returncode not in {0, 1}:
             raise SystemExit(f"evals: clean doctor exit {doctor.returncode}")

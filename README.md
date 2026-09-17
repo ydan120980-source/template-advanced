@@ -68,6 +68,24 @@ python3 -m unittest discover -s tests        # Linux / macOS
 py -3 -m unittest discover -s tests          # Windows (Git Bash)
 ```
 
+Windows does not require PowerShell script execution for the Python tools. If
+local Execution Policy blocks `.ps1` files, use the direct Python module entry
+points; do not weaken the machine/user policy or use `Bypass`:
+
+```powershell
+py -3 -B -m tools.aiwf_run_guard --help
+py -3 -B -m tools.template_doctor --root . --format json
+py -3 -B -m tools.governance_v2 --help
+```
+
+For repository Bash scripts from a Windows shell, the Python launcher resolves
+Git for Windows Bash, rejects the System32/WindowsApps/WSL launcher paths, and
+preserves script arguments and the native exit code:
+
+```powershell
+py -3 -B scripts/invoke-git-bash.py scripts/verify.sh
+```
+
 The validation commands never depend on `PYTHONDONTWRITEBYTECODE` being preset:
 the suite and the tools suppress bytecode writes themselves (`-B` and internal
 guards).
@@ -136,21 +154,25 @@ python3 -B -m tools.aiwf_run_guard --help
 python3 -B -m tools.aiwf_run_guard preflight --root . --format json
 ```
 
-On Windows Git Bash, substitute `python3` with `py -3`. The PowerShell wrapper
-`scripts/aiwf-run-guard.ps1` discovers Python in the order `py -3`, `python`,
-`python3` and requires Python 3.11 or newer.
+On Windows Git Bash, substitute `python3` with `py -3`. Direct
+`py -3 -B -m tools.aiwf_run_guard ...` is the supported non-PowerShell entry
+when script execution is restricted. The existing PowerShell wrapper
+`scripts/aiwf-run-guard.ps1` remains supported and discovers Python in the
+order `py -3`, `python`, `python3`, requiring Python 3.11 or newer.
 
-The active GitHub Task Issue is the authoritative sprint contract; planning
-journals and Run Guard evidence cannot expand its scope or relax its stop
-conditions. See [AIWF Run Guard](docs/ai-workflow/AIWF_RUN_GUARD.md).
+The GitHub Task Issue is the normal long-lived sprint authority; before an Issue
+exists, a separately verified owner-approved local bootstrap may temporarily
+authorize the exact frozen contract. Planning journals, caches, and Run Guard
+evidence cannot expand either authority or relax its stop conditions. See
+[AIWF Run Guard](docs/ai-workflow/AIWF_RUN_GUARD.md).
 
 ## Build A Release
 
 ```bash
 python3 scripts/build-release.py
 python3 scripts/verify-release-archive.py \
-  --archive dist/template-advanced-2.1.0.zip \
-  --manifest dist/template-advanced-2.1.0.manifest.json \
+  --archive dist/template-advanced-2.2.0.zip \
+  --manifest dist/template-advanced-2.2.0.manifest.json \
   --require-release-set
 ```
 
@@ -201,8 +223,8 @@ release artifacts.
 
    ```bash
    python3 scripts/verify-release-archive.py \
-     --archive template-advanced-2.1.0.zip \
-     --manifest template-advanced-2.1.0.manifest.json \
+     --archive template-advanced-2.2.0.zip \
+     --manifest template-advanced-2.2.0.manifest.json \
      --require-release-set \
      --validate
    ```
@@ -215,14 +237,14 @@ release artifacts.
 
 ## Release Artifacts
 
-- `template-advanced-2.1.0.zip` — the deterministic release archive.
-- `template-advanced-2.1.0.manifest.json` — path, size, SHA-256, and mode for
+- `template-advanced-2.2.0.zip` — the deterministic release archive.
+- `template-advanced-2.2.0.manifest.json` — path, size, SHA-256, and mode for
   every file plus the publication digest.
-- `template-advanced-2.1.0.digest.txt` — the publication digest.
-- `template-advanced-2.1.0.payload.digest.txt` — the archive-byte SHA-256.
-- `template-advanced-2.1.0.provenance.json` — source and companion-asset
+- `template-advanced-2.2.0.digest.txt` — the publication digest.
+- `template-advanced-2.2.0.payload.digest.txt` — the archive-byte SHA-256.
+- `template-advanced-2.2.0.provenance.json` — source and companion-asset
   provenance.
-- `template-advanced-2.1.0.release-set.json` — the non-self-referential
+- `template-advanced-2.2.0.release-set.json` — the non-self-referential
   release-set digest and asset summary.
 - `SHA256SUMS` — SHA-256 of the six release assets above.
 

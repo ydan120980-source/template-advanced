@@ -546,6 +546,14 @@ class TemplateDoctorCliTests(unittest.TestCase):
             cache = isolated_root / "tools" / "__pycache__"
             cache.mkdir(parents=True)
             (cache / "module.pyc").write_bytes(b"not executable bytecode")
+            forced = _run_git(
+                isolated_root,
+                "add",
+                "-f",
+                "--",
+                "tools/__pycache__/module.pyc",
+            )
+            self.assertEqual(forced.returncode, 0, forced.stderr)
             completed = run_doctor(isolated_root)
 
         self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
@@ -564,6 +572,8 @@ class TemplateDoctorCliTests(unittest.TestCase):
             isolated_root = Path(temporary_directory) / "sensitive_filename"
             materialize_ready_fixture(isolated_root)
             (isolated_root / ".env").write_text(f"TOKEN={secret}\n", encoding="utf-8")
+            forced = _run_git(isolated_root, "add", "-f", "--", ".env")
+            self.assertEqual(forced.returncode, 0, forced.stderr)
             completed = run_doctor(isolated_root)
 
         self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
@@ -576,6 +586,90 @@ class TemplateDoctorCliTests(unittest.TestCase):
         )
         self.assertEqual(finding["status"], "fail")
         self.assertIn(".env", finding["evidence"])
+
+    def test_ignored_node_python_rust_and_custom_build_outputs_do_not_block(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            isolated_root = Path(temporary_directory) / "ignored_build_outputs"
+            materialize_ready_fixture(isolated_root)
+            gitignore = isolated_root / ".gitignore"
+            gitignore.write_text(
+                gitignore.read_text(encoding="utf-8")
+                + "\n.next/\n.venv/\ntarget/\ncustom-build-cache/\n",
+                encoding="utf-8",
+            )
+            for relative in (
+                ".next/cache/node.bin",
+                ".venv/cache/python.bin",
+                "target/debug/rust.bin",
+                "custom-build-cache/tool.bin",
+            ):
+                path = isolated_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"x" * (1024 * 1024 + 1))
+
+            completed = run_doctor(isolated_root)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        for rule_id in (
+            "repository.generated_artifacts",
+            "repository.large_files",
+            "repository.sensitive_filenames",
+        ):
+            finding = next(item for item in report["results"] if item["rule_id"] == rule_id)
+            self.assertEqual(finding["status"], "pass", finding)
+            self.assertIn("mode=git", finding["evidence"])
+
+    def test_gitignore_negation_restores_untracked_candidate_to_doctor_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            isolated_root = Path(temporary_directory) / "ignore_negation"
+            materialize_ready_fixture(isolated_root)
+            gitignore = isolated_root / ".gitignore"
+            gitignore.write_text(
+                gitignore.read_text(encoding="utf-8")
+                + "\ngenerated/*\n!generated/keep.bin\n",
+                encoding="utf-8",
+            )
+            ignored = isolated_root / "generated" / "drop.bin"
+            kept = isolated_root / "generated" / "keep.bin"
+            ignored.parent.mkdir(parents=True)
+            ignored.write_bytes(b"x" * (1024 * 1024 + 1))
+            kept.write_bytes(b"y" * (1024 * 1024 + 1))
+
+            completed = run_doctor(isolated_root)
+
+        self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item for item in report["results"] if item["rule_id"] == "repository.large_files"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertIn("generated/keep.bin", finding["evidence"])
+        self.assertNotIn("generated/drop.bin", finding["evidence"])
+
+    def test_force_tracked_ignored_large_file_still_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            isolated_root = Path(temporary_directory) / "tracked_ignored_large"
+            materialize_ready_fixture(isolated_root)
+            gitignore = isolated_root / ".gitignore"
+            gitignore.write_text(
+                gitignore.read_text(encoding="utf-8") + "\ntracked-large.bin\n",
+                encoding="utf-8",
+            )
+            large = isolated_root / "tracked-large.bin"
+            large.write_bytes(b"z" * (1024 * 1024 + 1))
+            forced = _run_git(isolated_root, "add", "-f", "--", "tracked-large.bin")
+            self.assertEqual(forced.returncode, 0, forced.stderr)
+
+            completed = run_doctor(isolated_root)
+
+        self.assertEqual(completed.returncode, 1, completed.stderr or completed.stdout)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item for item in report["results"] if item["rule_id"] == "repository.large_files"
+        )
+        self.assertEqual(finding["status"], "fail")
+        self.assertIn("tracked-large.bin", finding["evidence"])
 
     def test_placeholder_github_workflow_blocks_ready(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
