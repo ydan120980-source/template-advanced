@@ -1286,6 +1286,35 @@ class ExportPathSemanticsTests(unittest.TestCase):
 
 
 class ExportCompletenessTests(unittest.TestCase):
+    def test_git_tree_paths_preserve_raw_non_utf8_path_bytes(self) -> None:
+        payload = (
+            b"100644 blob 1111111111111111111111111111111111111111\tnormal\0"
+            b"100644 blob 2222222222222222222222222222222222222222\tbad\xffname\0"
+            b"100644 blob 3333333333333333333333333333333333333333\tbad\xfename\0"
+        )
+        completed = subprocess.CompletedProcess(
+            args=["git"],
+            returncode=0,
+            stdout=payload,
+            stderr=b"",
+        )
+        with unittest.mock.patch.object(
+            prepare_module.subprocess,
+            "run",
+            return_value=completed,
+        ) as run:
+            paths = prepare_module._git_tree_paths(Path("source"), "a" * 40)
+
+        self.assertEqual(
+            [path.encode("utf-8", "surrogateescape") for path in paths],
+            [b"normal", b"bad\xffname", b"bad\xfename"],
+        )
+        self.assertTrue(all("\ufffd" not in path for path in paths))
+        kwargs = run.call_args.kwargs
+        self.assertNotIn("text", kwargs)
+        self.assertNotIn("encoding", kwargs)
+        self.assertNotIn("errors", kwargs)
+
     def test_export_matches_the_committed_file_set(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             out_root = Path(temporary_directory)

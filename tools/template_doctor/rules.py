@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from dataclasses import dataclass
 import fnmatch
 import json
@@ -90,15 +89,6 @@ REQUIRED_RELEASE_DOCS = (
     "docs/ai-workflow/GITHUB_RELEASE_READINESS.md",
     ".gitattributes",
 )
-REPOSITORY_WALK_EXCLUDES = {
-    ".git",
-    ".codegraph",
-    ".planning",
-    "dist",
-    "archive",
-    "examples",
-    "references",
-}
 SENSITIVE_FILENAMES = {
     ".env",
     "credentials.json",
@@ -709,23 +699,54 @@ def _release_documents(root: Path) -> CheckResult:
     )
 
 
-def _walk_release_files(root: Path) -> Iterator[Path]:
-    """Yield repository files without following local evidence or VCS metadata."""
+def _selected_repository_files(root: Path) -> tuple[str, list[Path]]:
+    """Return Doctor hygiene candidates without following link targets."""
 
-    for directory, subdirectories, filenames in os.walk(root, followlinks=False):
-        subdirectories[:] = sorted(
-            name for name in subdirectories if name not in REPOSITORY_WALK_EXCLUDES
-        )
-        base = Path(directory)
-        for filename in sorted(filenames):
-            yield base / filename
+    from .content_selection import ContentSelectionError, select_doctor_content
+
+    try:
+        selection = select_doctor_content(root)
+    except ContentSelectionError:
+        raise
+    paths: list[Path] = []
+    for relative in selection.paths:
+        path = root / relative
+        try:
+            path.lstat()
+        except OSError:
+            # A tracked file can be deleted in a dirty worktree. Other Doctor
+            # and release gates diagnose that state; hygiene rules inspect only
+            # content that actually exists without following external links.
+            continue
+        paths.append(path)
+    return selection.mode, paths
+
+
+def _selection_failure(rule_id: str, exc: Exception) -> CheckResult:
+    return _result(
+        rule_id,
+        status="fail",
+        evidence=f"Repository content selection failed: {exc}",
+        recommendation=(
+            "Repair Git/release-manifest evidence; Doctor must not silently "
+            "fall back after a repository content-selection error."
+        ),
+    )
 
 
 def _generated_artifacts(root: Path) -> CheckResult:
     rule_id = "repository.generated_artifacts"
+    try:
+        mode, selected = _selected_repository_files(root)
+    except Exception as exc:
+        from .content_selection import ContentSelectionError
+
+        if isinstance(exc, ContentSelectionError):
+            return _selection_failure(rule_id, exc)
+        raise
     generated = sorted(
         path.relative_to(root).as_posix()
-        for path in _walk_release_files(root)
+        for path in selected
         if path.suffix.lower() in {".pyc", ".pyo"} or "__pycache__" in path.parts
     )
     if generated:
@@ -740,15 +761,23 @@ def _generated_artifacts(root: Path) -> CheckResult:
     return _result(
         rule_id,
         status="pass",
-        evidence="No Python bytecode or __pycache__ artifacts were found in release content.",
+        evidence=f"No Python bytecode or __pycache__ artifacts were found in selected repository content (mode={mode}).",
         recommendation="Run validation with PYTHONDONTWRITEBYTECODE=1 before packaging.",
     )
 
 
 def _sensitive_filenames(root: Path) -> CheckResult:
     rule_id = "repository.sensitive_filenames"
+    try:
+        mode, selected = _selected_repository_files(root)
+    except Exception as exc:
+        from .content_selection import ContentSelectionError
+
+        if isinstance(exc, ContentSelectionError):
+            return _selection_failure(rule_id, exc)
+        raise
     candidates: list[str] = []
-    for path in _walk_release_files(root):
+    for path in selected:
         name = path.name.lower()
         if name == ".env.example":
             continue
@@ -764,17 +793,25 @@ def _sensitive_filenames(root: Path) -> CheckResult:
     return _result(
         rule_id,
         status="pass",
-        evidence="No common secret-bearing filenames were found; file contents were not opened by this rule.",
+        evidence=f"No common secret-bearing filenames were found in selected repository content (mode={mode}); file contents were not opened by this rule.",
         recommendation="Also run an approved content-level secret scan before public release.",
     )
 
 
 def _large_release_files(root: Path) -> CheckResult:
     rule_id = "repository.large_files"
+    try:
+        mode, selected = _selected_repository_files(root)
+    except Exception as exc:
+        from .content_selection import ContentSelectionError
+
+        if isinstance(exc, ContentSelectionError):
+            return _selection_failure(rule_id, exc)
+        raise
     oversized: list[str] = []
-    for path in _walk_release_files(root):
+    for path in selected:
         try:
-            size = path.stat().st_size
+            size = path.lstat().st_size
         except OSError:
             continue
         if size > MAX_RELEASE_FILE_BYTES:
@@ -789,7 +826,7 @@ def _large_release_files(root: Path) -> CheckResult:
     return _result(
         rule_id,
         status="pass",
-        evidence="No release-content file exceeds 1 MiB.",
+        evidence=f"No selected repository-content file exceeds 1 MiB (mode={mode}).",
         recommendation="Review large-file policy again before creating a Git baseline.",
     )
 

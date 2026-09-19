@@ -52,13 +52,14 @@ def _github_token() -> str:
     )
 
 
-def _github_headers(token: str, *, content_type: bool = False) -> dict[str, str]:
+def _github_headers(token: str | None, *, content_type: bool = False) -> dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "template-advanced-governance-v2",
-        "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": _GITHUB_API_VERSION,
     }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     if content_type:
         headers["Content-Type"] = "application/json"
     return headers
@@ -752,7 +753,7 @@ def _fetch_issue_payload(
     *,
     repo: str,
     issue_number: int,
-    token: str,
+    token: str | None,
     timeout: float,
     opener: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
@@ -774,7 +775,7 @@ def _fetch_issue_comments(
     *,
     repo: str,
     issue_number: int,
-    token: str,
+    token: str | None,
     timeout: float,
     opener: Callable[..., Any] | None = None,
 ) -> list[dict[str, Any]]:
@@ -850,6 +851,93 @@ def _events_from_comments(comments: Iterable[dict[str, Any]]) -> list[TaskEvent]
     for comment in comments:
         events.extend(_events_from_comment_body(comment["body"]))
     return events
+
+
+def read_issue_authority(
+    *,
+    repo: str,
+    issue_number: int,
+    timeout: float = _DEFAULT_ISSUE_TIMEOUT,
+    opener: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
+    """Read one Task Issue contract and event chain without mutating GitHub."""
+
+    timeout = _validate_timeout(timeout)
+    _repo_api_root(repo)
+    if isinstance(issue_number, bool) or not isinstance(issue_number, int) or issue_number < 1:
+        raise IssueCommandError(
+            "issue number must be positive",
+            code="INVALID_ISSUE_NUMBER",
+        )
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    payload = _fetch_issue_payload(
+        repo=repo,
+        issue_number=issue_number,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    if payload.get("state") != "open":
+        raise IssueCommandError("Task Issue is not open", code="ISSUE_NOT_OPEN")
+    if _is_pull_request(payload):
+        raise IssueCommandError(
+            "Task Issue reference is a Pull Request",
+            code="ISSUE_REFERENCE_IS_PR",
+        )
+    body = payload.get("body")
+    if not isinstance(body, str):
+        raise IssueCommandError(
+            "Task Issue has no string contract body",
+            code="CONTRACT_READ_FAILED",
+        )
+    try:
+        contract = TaskContract.from_dict(extract_contract(body))
+    except (ContractError, IssueCommandError) as exc:
+        raise IssueCommandError(
+            "Task Issue contract is invalid",
+            code="CONTRACT_READ_FAILED",
+        ) from exc
+    if contract.data["repository_id"] != repo:
+        raise IssueCommandError(
+            "Task Issue contract repository does not match",
+            code="REPOSITORY_CONTRACT_MISMATCH",
+        )
+    if payload.get("title") != f"[AIWF Task] {contract.data['task_id']}":
+        raise IssueCommandError(
+            "Task Issue title does not match contract task_id",
+            code="ISSUE_TITLE_MISMATCH",
+        )
+    comments = _fetch_issue_comments(
+        repo=repo,
+        issue_number=issue_number,
+        token=token,
+        timeout=timeout,
+        opener=opener,
+    )
+    events = _events_from_comments(comments)
+    if events:
+        report = verify_event_chain(event.to_dict() for event in events)
+        if report["status"] != "PASS":
+            raise IssueCommandError(
+                f"Task Issue event chain is invalid: {report['code']}",
+                code=str(report["code"]),
+            )
+        if any(event.task_id != contract.data["task_id"] for event in events):
+            raise IssueCommandError(
+                "Issue event task_id does not match contract",
+                code="EVENT_TASK_MISMATCH",
+            )
+    return {
+        "status": "PASS",
+        "code": "ISSUE_AUTHORITY_READ",
+        "repository": repo,
+        "issue_number": issue_number,
+        "issue_url": f"https://github.com/{repo}/issues/{issue_number}",
+        "contract": contract.to_dict(),
+        "contract_digest": contract.digest,
+        "events": [event.to_dict() for event in events],
+        "remote_writes": False,
+    }
 
 
 def _validate_issue_for_append(

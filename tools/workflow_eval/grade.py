@@ -29,6 +29,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -323,6 +324,12 @@ def grade_trial(
         text=True,
         encoding="utf-8",
         timeout=600,
+        env={
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1",
+        },
     )
     stdout = completed.stdout.strip()
     if not stdout:

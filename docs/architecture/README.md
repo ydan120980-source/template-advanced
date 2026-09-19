@@ -25,13 +25,15 @@ The repository targets Python 3.11+ and the Python standard library only.
   - `reporters.py`: deterministic JSON and Markdown output.
 - `tools/governance_v2/`
   - `__main__.py`: `issue` (`init`, `sync`, `verify`, `create`, `append`), `migration`
-    (`build`, `verify`), `bootstrap` (`snapshot`, `plan`), and `gate` (`static`, `github`) commands.
+    (`build`, `verify`), `bootstrap` (`snapshot`, `plan`, `init`, `verify`, `adopt`), and `gate` (`static`, `github`) commands.
   - `models.py`: frozen `governance.task/v2` contract and self-verifying event schemas.
   - `canonical.py`: deterministic canonical JSON digest used by contracts and events.
   - `issue.py`: contract load/verify/sync, verified Issue creation and readback, verified
     event appending, and event-chain verification.
-  - `bootstrap.py`: read-only Stage 0 snapshots and desired-plan previews; unavailable refs
-    are distinguished from expected states instead of being cached as facts.
+  - `bootstrap.py`: read-only Stage 0 snapshots/desired-plan previews plus the temporary
+    local-bootstrap authority service. Local authority is immutable, exact-digest and
+    repository/base bound, stored under `.aiwf/bootstrap/`, and can be retired only after
+    read-only verification of a matching Task Issue contract and adoption event.
   - `migration.py`: commit/file matrix build and verify for audited migrations.
   - `remote.py`: read-only Remote Gate evaluation of GitHub check runs.
   - `workflow.py`: static workflow/workflow-permission checks.
@@ -57,6 +59,13 @@ The repository targets Python 3.11+ and the Python standard library only.
 
 The verified GitHub Task Issue is the long-lived planning authority: its contract fixes
 the goal, allowed and forbidden paths, acceptance, base SHA, budget, and stop conditions.
+When no Issue exists yet, a user-approved `local_bootstrap` record may temporarily be
+the first authority for that exact contract. It lives under `.aiwf/bootstrap/<task-id>/`,
+requires an expected contract digest from approved context, binds repository identity and
+the real Git base, reports remote gates as `NOT_RUN`, and cannot be rewritten to widen scope.
+Adoption is a handoff, not a second concurrent authority: once remote adoption starts,
+local execution blocks until a matching Issue contract and `bootstrap_contract_adopted`
+event are verified; then the local authority is retired and the Issue becomes authoritative.
 `docs/control/NEXT_CODEX_TASK.md` and the other v1 control files are retired; their
 history remains in Git and `docs/control/CODEX_RUNTIME_PROFILE.md` survives only as
 legacy compatibility reference. Validated offline caches under `.aiwf/cache/`,
@@ -105,6 +114,10 @@ Rule IDs, event kinds, CLI flags, exit codes, JSON keys, JSONL semantics, orderi
 - `issue create` and `issue append` require explicit `--confirm-write` plus a
   `GH_TOKEN`/`GITHUB_TOKEN` credential, verify every write through a readback,
   and are the only remote-write paths; every other command is local or read-only.
+- `bootstrap init` creates an immutable first-authority record for an explicitly
+  approved contract; `bootstrap verify` requires the externally fixed expected
+  digest and verifies current Git history; `bootstrap adopt` performs remote reads
+  only and retires local authority only after matching contract/event evidence.
 - Local commands report JSON with deterministic exit codes: `0` pass,
   `1` fail, `2` blocked, `3` cached, `4` not run.
 - Failure codes (for example `CONFIRM_WRITE_REQUIRED`, `ISSUE_CONTRACT_CONFLICT`,
@@ -132,6 +145,7 @@ Rule IDs, event kinds, CLI flags, exit codes, JSON keys, JSONL semantics, orderi
 ## Generated And Local Files
 
 - `.planning/<task-id>/run-guard.json`, `run-guard-events.jsonl`, attestations, and planning journals are generated local evidence. Their source is the active Task Packet plus the run configuration and recorded execution; they are ignored by Git and must not be hand-edited to repair evidence.
+- `.aiwf/bootstrap/<task-id>/authority.json` and its adoption receipt are local governance records, not disposable cache. The authority record is immutable and must be verified through the governance CLI; do not hand-edit it. After successful adoption it is retained only as handoff evidence while the Issue/cache path becomes authoritative.
 - `__pycache__/`, `*.pyc`, coverage output, test results, eval results, logs, and build directories are generated and ignored. Delete them only after resolving and verifying exact in-workspace targets.
 - There are no checked-in generated source files. If code generation is introduced, document the generator, inputs, deterministic command, review method, and whether outputs are tracked before adoption.
 

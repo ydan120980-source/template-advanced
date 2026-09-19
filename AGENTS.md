@@ -24,12 +24,15 @@ After each completed sprint, Codex must stop at a review point and return the Ev
 ## Default Reading Order
 
 1. `AGENTS.md`
-2. The active GitHub Task Issue and its verified `governance.task/v2` body
+2. The active GitHub Task Issue and its verified `governance.task/v2` body. If no Task Issue exists yet and the owner explicitly approved a local bootstrap contract, verify the immutable `.aiwf/bootstrap/<task-id>/authority.json` record instead.
 3. `docs/control/CODEX_RUNTIME_PROFILE.md` only when a legacy compatibility task explicitly names it
-4. The task-specific files named by the Issue or a validated cache
+4. The task-specific files named by the Issue, verified local bootstrap contract, or validated cache
 
-After PR A, the Task Issue is the active authority. `docs/control` state files
-and `.aiwf` caches are not interchangeable with it.
+After PR A, the Task Issue is the normal long-lived authority. A verified
+`local_bootstrap` record is a temporary first authority only when no Task Issue
+exists and the owner explicitly approved the exact contract digest. `.aiwf/cache`
+remains subordinate offline evidence for an existing Issue and is never a
+substitute for bootstrap authority.
 
 Do not read `archive/`, `examples/`, or `references/` by default. Use `docs/ai-workflow/` and `docs/architecture/` only when the task packet, a skill, or a review role requires them.
 
@@ -45,13 +48,20 @@ Workflow Modes are repository governance labels, not Codex CLI configuration pro
 
 The GitHub Task Issue is the long-lived planning authority. Its contract fixes
 the goal, allowed/forbidden paths, acceptance, base SHA, and stop conditions.
+Before a Task Issue exists, an owner-approved local bootstrap may temporarily
+authorize the exact same `governance.task/v2` contract through
+`.aiwf/bootstrap/<task-id>/authority.json`. The bootstrap record is immutable,
+must verify against an independently supplied expected digest plus repository/base
+identity, cannot widen scope, and reports remote gates as `NOT_RUN`.
 During the PR A migration, a temporary local execution packet may narrow the
 Issue scope; it may not contradict the Issue and is removed when the old active
 control plane is retired.
 
 Validated `.aiwf/cache` files, planning journals, Run Guard ledgers, and chat
 summaries are evidence only. They cannot expand scope or relax a stop
-condition.
+condition. A local bootstrap authority is deliberately stored outside cache;
+once a matching Task Issue and `bootstrap_contract_adopted` event are verified,
+the local authority is retired and Issue/cache authority takes over.
 
 `planning-with-files` is an optional execution-journal mechanism, not a second control plane:
 
@@ -127,8 +137,11 @@ MCP is an optional external capability. It is not enabled by default, and tasks 
 
 Follow the verified GitHub Task Issue's Goal, Allowed Paths, Forbidden Paths,
 Budget, Validation Commands, Stop Conditions, and acceptance contract. If a
-transitional local packet is present during migration, it may narrow but never
-expand the Issue; if the two disagree, stop and report the conflict.
+Task Issue does not exist yet, the same rule applies to a verified owner-approved
+local bootstrap contract. If adoption is pending, execution must stop to avoid
+dual authority. If a transitional local packet is present during migration, it
+may narrow but never expand the active authority; if they disagree, stop and
+report the conflict.
 
 Run Guard is optional diagnostic evidence. It cannot replace exact-SHA CI,
 Security, release-candidate, payload/provenance, or Remote Gate evidence.
@@ -137,7 +150,7 @@ If the task needs files outside Allowed Paths, touches Forbidden Paths, exceeds 
 
 ## Validation And Evidence
 
-Run the validation commands required by the Task Issue or validated cache. If validation cannot run, report the exact command and reason.
+Run the validation commands required by the Task Issue, verified local bootstrap authority, or validated cache. If validation cannot run, report the exact command and reason.
 
 Every completion must output an Evidence Ledger with files changed, commands
 run, native validation results, local-vs-remote evidence, scope check, risks,

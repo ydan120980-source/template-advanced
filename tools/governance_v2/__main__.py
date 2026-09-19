@@ -8,7 +8,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .bootstrap import BootstrapError, plan as bootstrap_plan, snapshot as bootstrap_snapshot
+from .bootstrap import (
+    BootstrapError,
+    adopt_local_authority,
+    init_local_authority,
+    plan as bootstrap_plan,
+    snapshot as bootstrap_snapshot,
+    verify_local_authority,
+)
 from .issue import (
     IssueCommandError,
     append_issue_event,
@@ -104,6 +111,24 @@ def build_parser() -> argparse.ArgumentParser:
     plan = bootstrap_commands.add_parser("plan")
     plan.add_argument("--snapshot", type=_path)
     plan.add_argument("--output", type=_path)
+    bootstrap_init = bootstrap_commands.add_parser("init")
+    bootstrap_init.add_argument("--root", default=".")
+    bootstrap_init.add_argument("--contract", required=True, type=_path)
+    bootstrap_init.add_argument("--expected-digest", required=True)
+    bootstrap_init.add_argument("--repository-id", required=True)
+    bootstrap_init.add_argument("--authorization-ref", required=True)
+    bootstrap_verify = bootstrap_commands.add_parser("verify")
+    bootstrap_verify.add_argument("--root", default=".")
+    bootstrap_verify.add_argument("--task-id", required=True)
+    bootstrap_verify.add_argument("--expected-digest", required=True)
+    bootstrap_verify.add_argument("--repository-id", required=True)
+    bootstrap_adopt = bootstrap_commands.add_parser("adopt")
+    bootstrap_adopt.add_argument("--root", default=".")
+    bootstrap_adopt.add_argument("--task-id", required=True)
+    bootstrap_adopt.add_argument("--expected-digest", required=True)
+    bootstrap_adopt.add_argument("--repo", required=True)
+    bootstrap_adopt.add_argument("--issue-number", required=True, type=int)
+    bootstrap_adopt.add_argument("--timeout", type=float, default=15.0)
 
     gate = domains.add_parser("gate")
     gate_commands = gate.add_subparsers(dest="command", required=True)
@@ -176,6 +201,30 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         )
     if args.domain == "bootstrap" and args.command == "plan":
         return bootstrap_plan(snapshot_path=args.snapshot, output=args.output)
+    if args.domain == "bootstrap" and args.command == "init":
+        return init_local_authority(
+            root=Path(args.root).resolve(),
+            contract_path=args.contract,
+            expected_digest=args.expected_digest,
+            repository_id=args.repository_id,
+            authorization_ref=args.authorization_ref,
+        )
+    if args.domain == "bootstrap" and args.command == "verify":
+        return verify_local_authority(
+            root=Path(args.root).resolve(),
+            task_id=args.task_id,
+            expected_digest=args.expected_digest,
+            repository_id=args.repository_id,
+        )
+    if args.domain == "bootstrap" and args.command == "adopt":
+        return adopt_local_authority(
+            root=Path(args.root).resolve(),
+            task_id=args.task_id,
+            expected_digest=args.expected_digest,
+            repo=args.repo,
+            issue_number=args.issue_number,
+            timeout=args.timeout,
+        )
     if args.domain == "gate" and args.command == "static":
         return static_check(Path(args.root).resolve())
     if args.domain == "gate" and args.command == "github":

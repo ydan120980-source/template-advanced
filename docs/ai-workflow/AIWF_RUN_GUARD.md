@@ -7,10 +7,13 @@ Task Issue, or qualify a GitHub release by itself.
 
 ## Authority boundary
 
-The GitHub Task Issue is the active task authority. A validated cache under
-`.aiwf/cache/` can support offline execution but cannot change scope or
-acceptance. `.aiwf/runs/` stores disposable local diagnostics. Neither runtime
-directory is released or included in a payload digest.
+The GitHub Task Issue is the normal long-lived task authority. Before an Issue
+exists, a verified owner-approved `local_bootstrap` record under
+`.aiwf/bootstrap/<task-id>/` may temporarily authorize the exact frozen
+contract. A validated cache under `.aiwf/cache/` can support offline execution
+for an existing Issue but cannot change scope or acceptance and cannot act as a
+bootstrap authority. `.aiwf/runs/` stores disposable local diagnostics. None of
+these runtime directories is released or included in a payload digest.
 
 The v1 control files (`docs/control/NEXT_CODEX_TASK.md` and siblings) are
 retired; their history remains in Git and
@@ -27,6 +30,13 @@ py -3 -B -m tools.aiwf_run_guard record --plan-dir <run-dir> --agent main --work
 py -3 -B -m tools.aiwf_run_guard summary --plan-dir <run-dir> --format json
 py -3 -B -m tools.aiwf_run_guard gate --root . --plan-dir <run-dir> --format json
 ```
+
+These direct Python commands are the first-class Windows path when PowerShell
+Execution Policy blocks `.ps1` wrappers. The workflow never changes system or
+user policy and never requires `Bypass`. When a Bash validation script must be
+launched from that environment, use `py -3 -B scripts/invoke-git-bash.py
+<script> [args...]`; it intentionally accepts Git for Windows Bash and rejects
+System32/WindowsApps/WSL launcher paths.
 
 It still rejects corrupted JSONL, invalid ownership, out-of-scope artifacts,
 unresolved failures, and invalid retry lineage. A configured local gate may

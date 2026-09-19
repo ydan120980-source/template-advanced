@@ -41,6 +41,24 @@ def _git(source_repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]
     )
 
 
+def _git_bytes(source_repo: Path, *arguments: str) -> subprocess.CompletedProcess[bytes]:
+    """Run a Git command whose stdout is a byte-framed protocol.
+
+    Git ``-z`` pathname output must not pass through a text decoder before the
+    NUL records are separated.  POSIX repositories can contain path bytes that
+    are not valid UTF-8, and replacing them would collapse distinct paths onto
+    the same lossy string.
+    """
+
+    return subprocess.run(
+        ["git", "-C", str(source_repo), *arguments],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=120,
+    )
+
+
 def resolve_commit(source_repo: Path, sha: str) -> str:
     completed = _git(source_repo, "rev-parse", "--verify", f"{sha}^{{commit}}")
     if completed.returncode != 0:
@@ -77,17 +95,18 @@ def _git_tree_paths(source_repo: Path, sha: str) -> list[str]:
     report a complete export as incomplete.
     """
 
-    completed = _git(source_repo, "ls-tree", "-r", "-z", sha)
+    completed = _git_bytes(source_repo, "ls-tree", "-r", "-z", sha)
     if completed.returncode != 0:
-        raise PrepareError(f"git ls-tree failed for {sha}: {completed.stderr.strip()}")
+        diagnostic = completed.stderr.decode("utf-8", "replace").strip()
+        raise PrepareError(f"git ls-tree failed for {sha}: {diagnostic}")
     paths: list[str] = []
-    for record in completed.stdout.split("\0"):
+    for record in completed.stdout.split(b"\0"):
         if not record:
             continue
-        metadata, _, name = record.partition("\t")
+        metadata, separator, name = record.partition(b"\t")
         fields = metadata.split()
-        if len(fields) >= 2 and fields[1] == "blob" and name:
-            paths.append(name)
+        if len(fields) >= 2 and fields[1] == b"blob" and separator and name:
+            paths.append(name.decode("utf-8", "surrogateescape"))
     return paths
 
 
