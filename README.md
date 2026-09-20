@@ -1,5 +1,7 @@
 # template-advanced
 
+English | [简体中文](README.zh-CN.md)
+
 `template-advanced` is a dependency-free Python toolkit and
 repository-governance template for auditable Codex sprints. It combines an
 executable Task Packet workflow with two local tools and a reproducible
