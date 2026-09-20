@@ -259,4 +259,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites, contribution workflow,
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution and additional notices.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
