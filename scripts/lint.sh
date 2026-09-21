@@ -30,16 +30,138 @@ cd "$REPO_ROOT"
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
+import subprocess
 import sys
 
 root = Path(sys.argv[1]).resolve()
-excluded = {".git", ".planning", "__pycache__", "archive", "examples", "references"}
-sources = sorted(
-    path
-    for path in root.rglob("*.py")
-    if not any(part in excluded for part in path.relative_to(root).parts)
-)
+excluded = {
+    ".aiwf",
+    ".cache",
+    ".git",
+    ".mypy_cache",
+    ".nox",
+    ".planning",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "archive",
+    "build",
+    "coverage",
+    "dist",
+    "env",
+    "examples",
+    "htmlcov",
+    "node_modules",
+    "out",
+    "references",
+    "venv",
+}
+
+
+def git_sources() -> list[Path] | None:
+    git_marker = root / ".git"
+    try:
+        probe = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "rev-parse",
+                "--is-inside-work-tree",
+                "--show-prefix",
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+    except FileNotFoundError:
+        if git_marker.exists():
+            raise SystemExit("lint: Git metadata exists but Git is unavailable.")
+        return None
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        if git_marker.exists():
+            raise SystemExit(
+                f"lint: Git repository probing failed: {type(exc).__name__}"
+            ) from exc
+        return None
+
+    if probe.returncode != 0:
+        if git_marker.exists():
+            diagnostic = os.fsdecode(probe.stderr).strip()
+            message = "lint: Git metadata exists but repository probing failed"
+            if diagnostic:
+                message += f": {diagnostic}"
+            raise SystemExit(message)
+        return None
+
+    lines = probe.stdout.splitlines()
+    if not lines or lines[0].strip() != b"true":
+        return None
+    prefix = lines[1] if len(lines) > 1 else b""
+    if prefix.strip():
+        # A source copy can live inside another repository. In that case the
+        # parent repository's ignore/index state is not authoritative here.
+        return None
+
+    selected = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "*.py",
+        ],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+    )
+    if selected.returncode != 0:
+        diagnostic = os.fsdecode(selected.stderr).strip()
+        message = f"lint: Git path selection failed with exit {selected.returncode}"
+        if diagnostic:
+            message += f": {diagnostic}"
+        raise SystemExit(message)
+
+    paths: list[Path] = []
+    for raw in selected.stdout.split(b"\x00"):
+        if not raw:
+            continue
+        relative = Path(os.fsdecode(raw))
+        candidate = root / relative
+        if candidate.is_file():
+            paths.append(candidate)
+    return sorted(set(paths), key=lambda path: path.relative_to(root).as_posix())
+
+
+def fallback_sources() -> list[Path]:
+    paths: list[Path] = []
+    for directory, subdirectories, filenames in os.walk(root, followlinks=False):
+        subdirectories[:] = sorted(
+            name
+            for name in subdirectories
+            if name.casefold() not in excluded
+        )
+        base = Path(directory)
+        for filename in sorted(filenames):
+            if filename.endswith(".py"):
+                paths.append(base / filename)
+    return sorted(paths, key=lambda path: path.relative_to(root).as_posix())
+
+
+sources = git_sources()
+if sources is None:
+    sources = fallback_sources()
 if not sources:
     raise SystemExit("lint: no Python sources found.")
 
