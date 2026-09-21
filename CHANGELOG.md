@@ -6,7 +6,15 @@ release tags exist.
 
 ## Unreleased
 
-No changes yet.
+### Fixed
+
+- Local lint now uses Git tracked plus untracked/non-ignored Python paths when
+  available, so ignored virtual environments, caches, dependency trees, and
+  project-specific build outputs do not create false findings while tracked
+  files remain in scope. Non-Git source copies keep an explicit fallback scan.
+- The default unittest entry point now performs one discovery from `tests/`,
+  so nested test modules are executed once instead of being rediscovered from
+  every directory that contains a test file.
 
 ## [2.2.0] - 2026-09-17
 

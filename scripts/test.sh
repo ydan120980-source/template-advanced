@@ -35,26 +35,21 @@ import unittest
 
 root = Path(sys.argv[1]).resolve()
 tests_root = root / "tests"
-suite_directories = sorted(
-    {
-        path.parent
-        for path in tests_root.rglob("test*.py")
-        if "__pycache__" not in path.parts
-    }
+test_modules = sorted(
+    path
+    for path in tests_root.rglob("test*.py")
+    if "__pycache__" not in path.parts
 )
-if not suite_directories:
+if not test_modules:
     raise SystemExit("test: no unittest modules found.")
 
-combined = unittest.TestSuite()
-for directory in suite_directories:
-    loader = unittest.TestLoader()
-    combined.addTests(loader.discover(str(directory), pattern="test*.py"))
-
-count = combined.countTestCases()
+loader = unittest.TestLoader()
+suite = loader.discover(str(tests_root), pattern="test*.py")
+count = suite.countTestCases()
 if count == 0:
     raise SystemExit("test: unittest discovery produced zero tests.")
 
-print(f"test: discovered {count} tests in {len(suite_directories)} suite directories")
-result = unittest.TextTestRunner(verbosity=2, failfast=True).run(combined)
+print(f"test: discovered {count} tests from tests/")
+result = unittest.TextTestRunner(verbosity=2, failfast=True).run(suite)
 raise SystemExit(0 if result.wasSuccessful() else 1)
 PY
