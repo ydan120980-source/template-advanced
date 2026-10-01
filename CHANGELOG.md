@@ -18,6 +18,9 @@ release tags exist.
   so nested test modules are executed once instead of being rediscovered from
   every directory that contains a test file.
 
+- Publication-digest evaluation disables automatic Git maintenance in its
+  temporary staging commands so detached Git writers cannot race cleanup.
+
 ## [2.2.0] - 2026-09-17
 
 ### Added

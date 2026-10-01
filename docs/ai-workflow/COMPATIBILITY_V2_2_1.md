@@ -1,8 +1,9 @@
 # v2.2.1 compatibility evidence
 
 The v2.2.1 candidate contains the local validation fixes already merged after
-v2.2.0, plus a version change and release documentation. It introduces no new
-public interface or dependency. `v2.2.0` points to commit
+v2.2.0, a fix preventing automatic Git maintenance from escaping temporary
+evaluation staging, plus a version change and release documentation. It
+introduces no new public interface or dependency. `v2.2.0` points to commit
 `67adc5c0f6db12a6b36c508b5e71e63e1834c9e9`; the pre-version-change template
 baseline is `895059351c98ecbdb6a58ff0818b6474c4c8ad2d`.
 

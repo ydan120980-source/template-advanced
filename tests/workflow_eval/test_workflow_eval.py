@@ -49,7 +49,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from tools.workflow_eval import prepare as prepare_module  # noqa: E402
-from tools.workflow_eval.acceptors import accept_publication_digest  # noqa: E402
+from tools.workflow_eval.acceptors import (  # noqa: E402
+    _commit_staging_repo, accept_publication_digest,
+)
 from tools.workflow_eval.audit import audit_session  # noqa: E402
 from tools.workflow_eval.grade import grade_trial  # noqa: E402
 from tools.workflow_eval.prepare import (  # noqa: E402
@@ -1138,6 +1140,35 @@ class AcceptorStagingTests(unittest.TestCase):
     against an acceptor-owned staging copy and the candidate repository keeps
     its HEAD, index, and worktree.
     """
+
+    def test_staging_commit_leaves_no_automatic_maintenance_child(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            staging = root / "staging"
+            staging.mkdir()
+            (staging / "probe.txt").write_bytes(b"staging-owned content\n")
+            trace = root / "git-trace.jsonl"
+            environment = {
+                "GIT_TRACE2_EVENT": str(trace.resolve()),
+                "GIT_CONFIG_COUNT": "4",
+                "GIT_CONFIG_KEY_0": "maintenance.loose-objects.enabled",
+                "GIT_CONFIG_VALUE_0": "true",
+                "GIT_CONFIG_KEY_1": "maintenance.loose-objects.auto",
+                "GIT_CONFIG_VALUE_1": "-1",
+                "GIT_CONFIG_KEY_2": "maintenance.autoDetach",
+                "GIT_CONFIG_VALUE_2": "true",
+                "GIT_CONFIG_KEY_3": "maintenance.gc.enabled",
+                "GIT_CONFIG_VALUE_3": "false",
+            }
+            with unittest.mock.patch.dict(os.environ, environment):
+                _commit_staging_repo(staging)
+            events = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+            maintenance_children = [
+                event["argv"] for event in events
+                if event.get("event") == "child_start" and "maintenance" in event.get("argv", [])
+            ]
+            self.assertEqual(maintenance_children, [])
+            self.assertEqual(_run_git(staging, "rev-list", "--count", "HEAD").stdout.strip(), "1")
 
     def test_acceptor_does_not_commit_an_ordinary_candidate_repository(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

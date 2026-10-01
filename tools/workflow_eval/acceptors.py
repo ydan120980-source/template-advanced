@@ -290,11 +290,16 @@ def _commit_staging_repo(staging_root: Path) -> None:
     repository is never touched. ``core.autocrlf=false`` keeps raw bytes so
     the builder's byte comparison is meaningful, and ``core.longpaths`` is
     repo-local so deeply nested fixtures survive ``git add`` on Windows.
+    Disable automatic maintenance for each staging command so Git cannot
+    leave a detached writer racing the staging directory cleanup.
     """
 
     def git(*arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", "-C", str(staging_root), *arguments],
+            [
+                "git", "-c", "maintenance.auto=false", "-c", "gc.auto=0",
+                "-C", str(staging_root), *arguments,
+            ],
             check=False,
             capture_output=True,
             text=True,
