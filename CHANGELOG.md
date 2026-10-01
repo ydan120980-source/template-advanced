@@ -6,6 +6,8 @@ release tags exist.
 
 ## Unreleased
 
+## [2.2.1] - 2026-10-01
+
 ### Fixed
 
 - Local lint now uses Git tracked plus untracked/non-ignored Python paths when
