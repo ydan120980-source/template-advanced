@@ -6,6 +6,8 @@ release tags exist.
 
 ## Unreleased
 
+## [2.2.1] - 2026-10-01
+
 ### Fixed
 
 - Local lint now uses Git tracked plus untracked/non-ignored Python paths when
@@ -15,6 +17,9 @@ release tags exist.
 - The default unittest entry point now performs one discovery from `tests/`,
   so nested test modules are executed once instead of being rediscovered from
   every directory that contains a test file.
+
+- Publication-digest evaluation disables automatic Git maintenance in its
+  temporary staging commands so detached Git writers cannot race cleanup.
 
 ## [2.2.0] - 2026-09-17
 
